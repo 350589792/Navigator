@@ -81,11 +81,13 @@ async def startup_event():
             logger.error("Failed to establish initial database connection")
             sys.exit(1)
 
-        # Create admin user if it doesn't exist
+        # Initialize database with required data
         from app.models.user import User
+        from app.models.domain import Domain
         from app.core.security import get_password_hash
         db = SessionLocal()
         try:
+            # Create admin user if it doesn't exist
             admin = db.query(User).filter(User.email == "admin@example.com").first()
             if not admin:
                 admin = User(
@@ -97,6 +99,29 @@ async def startup_event():
                 db.add(admin)
                 db.commit()
                 logger.info("Admin user created successfully")
+
+            # Initialize domains if they don't exist
+            domains = {
+                "Technology": "Latest technology trends and innovations",
+                "Finance": "Financial markets and business insights",
+                "Medical": "Healthcare and medical advancements",
+                "AI": "Artificial Intelligence and Machine Learning developments"
+            }
+
+            for name, description in domains.items():
+                domain = db.query(Domain).filter(Domain.name == name).first()
+                if not domain:
+                    domain = Domain(
+                        name=name,
+                        description=description,
+                        is_active=True,
+                        data_sources="[]"
+                    )
+                    db.add(domain)
+                    logger.info(f"Domain {name} created successfully")
+            db.commit()
+            logger.info("Domain initialization completed")
+
         finally:
             db.close()
 
