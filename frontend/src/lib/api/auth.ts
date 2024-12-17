@@ -18,7 +18,7 @@ export const auth = {
     formData.append('password', data.password);
 
     const tokenResponse = await api.post<TokenResponse>(
-      '/api/v1/auth/login',
+      '/auth/login',
       formData,
       {
         headers: {
@@ -32,7 +32,7 @@ export const auth = {
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
     // Fetch user data
-    const userResponse = await api.get<User>('/api/v1/users/me');
+    const userResponse = await api.get<User>('/users/me');
 
     return {
       token,
@@ -41,20 +41,20 @@ export const auth = {
   },
 
   register: async (data: RegisterData): Promise<AuthResponse> => {
-    await api.post<User>('/api/v1/auth/register', data);
+    await api.post<User>('/auth/register', data);
     return auth.login({ email: data.email, password: data.password });
   },
 
   resetPassword: async (email: string): Promise<void> => {
-    await api.post('/api/v1/auth/reset-password', { email });
+    await api.post('/auth/reset-password', { email });
   },
 
   setNewPassword: async (token: string, password: string): Promise<void> => {
-    await api.post('/api/v1/auth/set-new-password', { token, password });
+    await api.post('/auth/set-new-password', { token, password });
   },
 
   getCurrentUser: async (): Promise<User> => {
-    const response = await api.get<User>('/api/v1/users/me');
+    const response = await api.get<User>('/users/me');
     return response.data;
   },
 };

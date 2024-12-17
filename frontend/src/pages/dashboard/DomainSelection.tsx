@@ -7,20 +7,20 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { domains } from '@/lib/api/domains';
 
 const AVAILABLE_DOMAINS = [
-  { id: 'tech', label: { zh: '科技', en: 'Technology' } },
-  { id: 'finance', label: { zh: '金融', en: 'Finance' } },
-  { id: 'medical', label: { zh: '医疗', en: 'Medical' } },
-  { id: 'ai', label: { zh: '人工智能', en: 'Artificial Intelligence' } },
+  { id: 1, label: { zh: '科技', en: 'Technology' } },
+  { id: 2, label: { zh: '金融', en: 'Finance' } },
+  { id: 3, label: { zh: '医疗', en: 'Medical' } },
+  { id: 4, label: { zh: '人工智能', en: 'Artificial Intelligence' } },
 ];
 
 export default function DomainSelection() {
   const { t, language } = useLanguage();
-  const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
+  const [selectedDomains, setSelectedDomains] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
-  const toggleDomain = (domainId: string) => {
+  const toggleDomain = (domainId: number) => {
     setSelectedDomains(prev =>
       prev.includes(domainId)
         ? prev.filter(id => id !== domainId)
