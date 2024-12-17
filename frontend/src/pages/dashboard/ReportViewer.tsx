@@ -63,6 +63,22 @@ export default function ReportViewer() {
               <Button onClick={fetchReports} disabled={isLoading}>
                 {isLoading ? t('common.loading') : t('common.refresh')}
               </Button>
+              <Button
+                onClick={async () => {
+                  setIsLoading(true);
+                  try {
+                    await reportsApi.reports.generateReport();
+                    await fetchReports();
+                  } catch (err) {
+                    setError(t('reports.generateError'));
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                disabled={isLoading}
+              >
+                {t('reports.generateReport')}
+              </Button>
             </div>
 
             {filteredReports.length === 0 ? (
