@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
+import logging
 from app.api import deps
 from app.crud import crud_report
 from app.schemas.report import Report, ReportCreate
@@ -12,6 +13,8 @@ except ImportError:
     SERVICES_AVAILABLE = False
     print("Warning: Report and email services not available")
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 @router.get("/", response_model=List[Report])
@@ -22,7 +25,13 @@ def get_reports(
     """
     Get all reports for current user.
     """
-    return crud_report.get_user_reports(db, user_id=current_user.id)
+    try:
+        reports = crud_report.get_by_user(db, user_id=current_user.id)
+        logger.info(f"Retrieved {len(reports)} reports for user {current_user.id}")
+        return reports
+    except Exception as e:
+        logger.error(f"Error fetching reports: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching reports")
 
 @router.post("/generate")
 async def generate_report(
