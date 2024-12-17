@@ -72,15 +72,33 @@ async def startup_event():
     """Initialize database on startup"""
     logger.info("Starting application initialization...")
     try:
+        # Create database tables
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+
         # Initialize database connection
         if not init_db_connection():
             logger.error("Failed to establish initial database connection")
             sys.exit(1)
 
-        # Initialize database
-        if not init_db():
-            logger.error("Failed to initialize database")
-            sys.exit(1)
+        # Create admin user if it doesn't exist
+        from app.models.user import User
+        from app.core.security import get_password_hash
+        db = SessionLocal()
+        try:
+            admin = db.query(User).filter(User.email == "admin@example.com").first()
+            if not admin:
+                admin = User(
+                    email="admin@example.com",
+                    hashed_password=get_password_hash("admin123"),
+                    is_admin=True,
+                    is_active=True
+                )
+                db.add(admin)
+                db.commit()
+                logger.info("Admin user created successfully")
+        finally:
+            db.close()
 
         logger.info("Application startup complete")
     except Exception as e:

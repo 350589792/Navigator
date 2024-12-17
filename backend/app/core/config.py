@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgres://postgres:postgres@db.internal:5432/postgres?sslmode=disable" if os.getenv("FLY_APP_NAME") else "sqlite:///./app.db"
+        "sqlite:///./app.db"  # Always use SQLite as default
     )
 
     # Email settings

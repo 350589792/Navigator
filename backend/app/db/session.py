@@ -10,13 +10,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_engine():
+    """Create SQLAlchemy engine with appropriate configuration"""
+    connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
     return create_engine(
         settings.DATABASE_URL,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
         pool_timeout=30,
-        connect_args={"connect_timeout": 10} if not settings.DATABASE_URL.startswith("sqlite") else {"check_same_thread": False}
+        connect_args=connect_args
     )
 
 engine = get_engine()
