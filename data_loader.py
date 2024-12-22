@@ -125,13 +125,13 @@ class DataLoader:
         side_temp = generate_temp_series(1350, amplitude=10, trend=-2)     # Lower still
         melting_temp = generate_temp_series(1300, amplitude=8, trend=-1)   # Most controlled
         
-        # Create DataFrame with generated data
+        # Create DataFrame with generated data and enforce float32 type
         temperature_data = pd.DataFrame({
             'timestamp': dates,  # Use English column name for consistency
-            'vault_temperature': vault_temp,    # 拱顶温度
-            'bottom_temperature': bottom_temp,  # 炉底温度
-            'side_temperature': side_temp,      # 炉壁温度
-            'melting_temperature': melting_temp # 熔化温度
+            'vault_temperature': np.array(vault_temp, dtype=np.float32),    # 拱顶温度
+            'bottom_temperature': np.array(bottom_temp, dtype=np.float32),  # 炉底温度
+            'side_temperature': np.array(side_temp, dtype=np.float32),      # 炉壁温度
+            'melting_temperature': np.array(melting_temp, dtype=np.float32) # 熔化温度
         })
         
         # Add some realistic constraints
@@ -222,6 +222,12 @@ class DataLoader:
             merged_data['day'] = merged_data['timestamp'].dt.day
             merged_data['month'] = merged_data['timestamp'].dt.month
             merged_data['year'] = merged_data['timestamp'].dt.year
+        
+        # Ensure all numeric columns are float32 before returning
+        if not merged_data.empty:
+            numeric_cols = merged_data.select_dtypes(include=[np.number]).columns
+            for col in numeric_cols:
+                merged_data[col] = merged_data[col].astype(np.float32)
         
         return merged_data
 
