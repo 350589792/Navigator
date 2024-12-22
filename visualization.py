@@ -1,7 +1,7 @@
 # utils/visualization.py
 
 import matplotlib.pyplot as plt
-import seaborn as sns
+from scipy import stats
 import numpy as np
 from pathlib import Path
 import plotly.graph_objects as go
@@ -21,8 +21,8 @@ class Visualizer:
         self.save_path.mkdir(parents=True, exist_ok=True)
 
         # 设置样式
-        plt.style.use('seaborn')
-        sns.set_palette("husl")
+        plt.style.use('default')
+        plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#FF0000', '#0000FF', '#00FF00', '#FFFF00', '#FF00FF', '#00FFFF'])
 
     def plot_training_history(self, history, save=True):
         """绘制训练历史"""
@@ -55,9 +55,9 @@ class Visualizer:
     def plot_temperature_field(self, temperature_field, title='Temperature Field'):
         """绘制温度场"""
         plt.figure(figsize=(10, 8))
-        sns.heatmap(temperature_field, cmap='hot', annot=False)
+        im = plt.imshow(temperature_field, cmap='hot', aspect='auto')
         plt.title(title)
-        plt.colorbar(label='Temperature (°C)')
+        plt.colorbar(im, label='Temperature (°C)')
 
         plt.savefig(self.save_path / 'temperature_field.png')
         plt.close()
@@ -65,7 +65,9 @@ class Visualizer:
     def plot_attention_weights(self, attention_weights, timestamps):
         """绘制注意力权重"""
         plt.figure(figsize=(12, 6))
-        sns.heatmap(attention_weights, xticklabels=timestamps, yticklabels=False)
+        im = plt.imshow(attention_weights, aspect='auto')
+        plt.xticks(range(len(timestamps)), timestamps, rotation=45)
+        plt.colorbar(im, label='Weight')
         plt.title('Attention Weights Distribution')
         plt.xlabel('Time')
 
@@ -96,7 +98,10 @@ class Visualizer:
         """绘制误差分布"""
         plt.figure(figsize=(10, 6))
 
-        sns.histplot(errors, kde=True)
+        plt.hist(errors, bins=30, density=True, alpha=0.7)
+        kde = stats.gaussian_kde(errors)
+        x_range = np.linspace(min(errors), max(errors), 200)
+        plt.plot(x_range, kde(x_range), 'r-', lw=2)
         plt.title('Prediction Error Distribution')
         plt.xlabel('Error (°C)')
         plt.ylabel('Count')
