@@ -6,12 +6,14 @@ from analognas.models.resnet32 import ResNet32
 from analognas.models.analog_t500 import T500Network
 from analognas.datasets import get_cifar10, get_vww, get_kws
 
-def get_model(model_name, num_classes):
+def get_model(model_name, num_classes, dataset_name):
     """Get model by name"""
     if model_name.lower() == 'resnet32':
         return ResNet32(num_classes=num_classes)
     elif model_name.lower() == 't500':
-        return T500Network(num_classes=num_classes)
+        # Use 1 channel for KWS, 3 channels for others
+        in_channels = 1 if dataset_name.lower() == 'kws' else 3
+        return T500Network(num_classes=num_classes, in_channels=in_channels)
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
@@ -51,8 +53,8 @@ def main():
 
     # Create model
     print(f"Creating {args.model} model...")
-    model = get_model(args.model, num_classes)
-    print(f"Estimated hardware cost: {model.get_hardware_cost():.2f}")
+    model = get_model(args.model, num_classes, args.dataset)
+
 
     # Test forward pass
     print("\nTesting forward pass...")

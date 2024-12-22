@@ -62,12 +62,3 @@ class ResNet32(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
-
-    def get_hardware_cost(self):
-        """
-        Estimate hardware resource usage based on model parameters and operations.
-        Returns a rough estimate of computational cost.
-        """
-        total_params = sum(p.numel() for p in self.parameters())
-        # Rough estimate: each parameter contributes to hardware cost
-        return total_params * 0.001  # Arbitrary scaling factor for demonstration

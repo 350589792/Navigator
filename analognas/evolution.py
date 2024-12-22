@@ -29,10 +29,10 @@ class Evolution:
         ]
     
     def mutate(self, architecture: nx.DiGraph) -> nx.DiGraph:
-        """Mutate an architecture."""
-        # Simple mutation: regenerate architecture
-        if np.random.random() < self.mutation_prob:
-            return self.search_space.create_random_architecture()
+        """Mutate an architecture using multi-granular mutations."""
+        if np.random.random() < self.mutation_prob: 
+            # Apply multi-granular mutation
+            return self.search_space.apply_multi_granular_mutation(architecture)
         return architecture
     
     def crossover(self, parent1: nx.DiGraph, parent2: nx.DiGraph) -> nx.DiGraph:

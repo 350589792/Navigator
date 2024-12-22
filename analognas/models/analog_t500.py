@@ -41,10 +41,10 @@ class T500Network(nn.Module):
     """
     AnalogNAS T500 architecture optimized for IMC hardware
     """
-    def __init__(self, num_classes=10):
+    def __init__(self, num_classes=10, in_channels=3):
         super(T500Network, self).__init__()
-        # Initial convolution with reduced channels
-        self.conv1 = nn.Conv2d(3, 8, kernel_size=3, stride=1, padding=1, bias=False)
+        # Initial convolution with reduced channels, supporting variable input channels
+        self.conv1 = nn.Conv2d(in_channels, 8, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(8)
         
         # IMC-optimized feature extraction
@@ -72,12 +72,3 @@ class T500Network(nn.Module):
         out = out.view(out.size(0), -1)
         out = self.fc(out)
         return out
-
-    def get_hardware_cost(self):
-        """
-        Estimate hardware resource usage based on model parameters and operations.
-        Considers IMC-specific optimizations.
-        """
-        total_params = sum(p.numel() for p in self.parameters())
-        # IMC-optimized estimation: considers reduced operations from depthwise separable convs
-        return total_params * 0.0005  # Lower multiplier due to IMC optimizations
