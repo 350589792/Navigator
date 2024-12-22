@@ -1,0 +1,4 @@
+numpy>=1.21.0  # Basic numerical computations, cross-platform
+torch>=1.9.0   # PyTorch for basic tensor operations, cross-platform
+networkx>=2.6.0  # For graph operations in architecture representation
+pyyaml>=5.4.1   # For configuration management
