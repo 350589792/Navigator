@@ -19,16 +19,12 @@ class SimilarityAnalyzer:
             min_df=1,  # 至少出现1次的词才会被考虑
             max_df=0.9,  # 出现在90%以上文档中的词会被过滤掉
             # 为特征标记和数值标记设置更高的IDF权重
-            vocabulary={
-                'FEATURE_超速': 2.0,
-                'FEATURE_闯红灯': 2.0,
-                'FEATURE_酒后': 2.0,
-                'FEATURE_逃逸': 2.0,
-                'SPEED_HIGH': 1.5,
-                'SPEED_VERY_HIGH': 2.0,
-                'DISTANCE_CLOSE': 1.5,
-                'DISTANCE_VERY_CLOSE': 2.0
-            }
+            # 动态词汇表，支持所有特征标记
+            vocabulary=None,
+            ngram_range=(1, 2),  # 支持单词和词组
+            use_idf=True,  # 使用逆文档频率
+            norm='l2',     # 使用L2归一化
+            lowercase=True
         )
         self.min_similarity = min_similarity
         
@@ -78,9 +74,18 @@ class SimilarityAnalyzer:
         # 计算余弦相似度
         similarities = cosine_similarity(query_vector, case_vectors)[0]
         
-        # 过滤低于阈值的案例
-        filtered_indices = [i for i, sim in enumerate(similarities) if sim >= self.min_similarity]
-        filtered_similarities = [(i, similarities[i]) for i in filtered_indices]
+        # 确保相似度分数在有效范围内
+        similarities = np.clip(similarities, 0, 1)
+        
+        # 过滤低于阈值的案例，但至少返回一个最相似的案例
+        if len(similarities) > 0:
+            max_sim = np.max(similarities)
+            if max_sim >= self.min_similarity:
+                filtered_indices = [i for i, sim in enumerate(similarities) if sim >= self.min_similarity]
+            else:
+                # 如果没有超过阈值的，返回最相似的一个
+                filtered_indices = [np.argmax(similarities)]
+            filtered_similarities = [(i, similarities[i]) for i in filtered_indices]
         
         # 按相似度降序排序并获取top_k个结果
         similar_cases = sorted(filtered_similarities, key=lambda x: x[1], reverse=True)[:top_k]

@@ -40,7 +40,8 @@ def add_feature_tokens(text: str) -> str:
     for keyword in KEYWORD_PATTERNS:
         if keyword in text:
             # 为每个找到的特征添加三次重复标记以增加其权重
-            text += f" FEATURE_{keyword} FEATURE_{keyword} FEATURE_{keyword}"
+            feature_token = f"feature_{keyword}".lower()
+            text += f" {feature_token} {feature_token} {feature_token}"
     
     return text
 
@@ -61,7 +62,16 @@ def custom_tokenizer(text: str) -> List[str]:
     from .numeric_utils import add_numeric_tokens
     text = add_numeric_tokens(text)
     
-    # 使用结巴分词进行基础分词
-    tokens = list(jieba.cut(text))
+    # 先分割出特征标记
+    tokens = []
+    parts = text.split()
+    for part in parts:
+        if part.startswith(('feature_', 'speed_', 'distance_')):
+            tokens.append(part.lower())
+        else:
+            # 对非特征标记使用结巴分词
+            for token in jieba.cut_for_search(part):
+                if token.strip():
+                    tokens.append(token.lower())
     
     return tokens

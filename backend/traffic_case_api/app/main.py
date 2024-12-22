@@ -10,11 +10,20 @@ similarity_analyzer = SimilarityAnalyzer(min_similarity=0.15)
 
 @app.post("/analyze_case")
 async def analyze_case(case: Case):
+    # 验证输入
+    if not case.content or len(case.content.strip()) == 0:
+        raise HTTPException(status_code=422, detail="Case content cannot be empty")
+        
+    # 验证输入
+    if not case.content or len(case.content.strip()) == 0:
+        raise HTTPException(status_code=422, detail="Case content cannot be empty")
+    
+    # 获取所有案例
+    all_cases = await data_manager.get_all_cases()
+    if not all_cases:
+        raise HTTPException(status_code=404, detail="No cases found in database")
+        
     try:
-        # 获取所有案例
-        all_cases = await data_manager.get_all_cases()
-        if not all_cases:
-            raise HTTPException(status_code=404, detail="No cases found in database")
             
         # 准备文本数据
         case_texts = [c["content"] for c in all_cases]
