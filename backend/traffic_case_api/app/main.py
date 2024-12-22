@@ -1,13 +1,13 @@
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
-import jieba
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from .models import CaseInput, CaseAnalysisResponse, LawReference, SimilarCase
 from .data_manager import CaseDataManager
 from .scraper import TrafficCaseScraper
+from .utils import custom_tokenizer  # Import our custom tokenizer
 
 app = FastAPI()
 
@@ -35,9 +35,8 @@ async def initialize_database():
         await case_scraper.update_case_database()
 
 def preprocess_text(text: str) -> str:
-    """对中文文本进行预处理"""
-    words = jieba.cut(text)
-    return " ".join(words)
+    """对中文文本进行预处理，使用自定义分词器"""
+    return " ".join(custom_tokenizer(text))
 
 @app.get("/healthz")
 async def healthz():
@@ -53,8 +52,8 @@ async def analyze_case(case_input: CaseInput, background_tasks: BackgroundTasks)
     case_texts = [case["content"] for case in all_cases]
     case_texts.append(case_input.case_text)
     
-    # Convert texts to TF-IDF vectors
-    vectorizer = TfidfVectorizer(tokenizer=lambda x: jieba.lcut(x))
+    # Convert texts to TF-IDF vectors using custom tokenizer for better drunk driving detection
+    vectorizer = TfidfVectorizer(tokenizer=custom_tokenizer)
     tfidf_matrix = vectorizer.fit_transform(case_texts)
     
     # Calculate similarity between input case and all other cases
