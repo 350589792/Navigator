@@ -8,7 +8,7 @@ class IMCBlock(nn.Module):
     """
     def __init__(self, in_channels, out_channels, stride=1):
         super(IMCBlock, self).__init__()
-        # Use 1x1 convolutions to reduce ACU consumption
+        # Use 1x1 convolutions to reduce hardware resource usage
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
         
@@ -73,9 +73,9 @@ class T500Network(nn.Module):
         out = self.fc(out)
         return out
 
-    def get_acu_consumption(self):
+    def get_hardware_cost(self):
         """
-        Estimate ACU consumption based on model parameters and operations.
+        Estimate hardware resource usage based on model parameters and operations.
         Considers IMC-specific optimizations.
         """
         total_params = sum(p.numel() for p in self.parameters())

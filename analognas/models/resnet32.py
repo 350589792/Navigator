@@ -7,7 +7,7 @@ class BasicBlock(nn.Module):
 
     def __init__(self, in_planes, planes, stride=1):
         super(BasicBlock, self).__init__()
-        # Use smaller kernel sizes and fewer filters to reduce ACU consumption
+        # Use smaller kernel sizes and fewer filters to reduce hardware resource usage
         self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
@@ -30,7 +30,7 @@ class BasicBlock(nn.Module):
 class ResNet32(nn.Module):
     def __init__(self, num_classes=10):
         super(ResNet32, self).__init__()
-        # Reduced initial channels to minimize ACU consumption
+        # Reduced initial channels to minimize hardware resource usage
         self.in_planes = 16
 
         # Initial convolution with smaller kernel and fewer filters
@@ -63,11 +63,11 @@ class ResNet32(nn.Module):
         out = self.linear(out)
         return out
 
-    def get_acu_consumption(self):
+    def get_hardware_cost(self):
         """
-        Estimate ACU consumption based on model parameters and operations.
-        Returns a rough estimate of ACU usage.
+        Estimate hardware resource usage based on model parameters and operations.
+        Returns a rough estimate of computational cost.
         """
         total_params = sum(p.numel() for p in self.parameters())
-        # Rough estimate: each parameter contributes to ACU consumption
+        # Rough estimate: each parameter contributes to hardware cost
         return total_params * 0.001  # Arbitrary scaling factor for demonstration

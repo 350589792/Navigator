@@ -34,7 +34,7 @@ Run the example search:
 python example_run.py
 ```
 
-The framework is designed for minimal ACU (Analog Compute Unit) consumption:
+The framework is designed for minimal hardware resource usage:
 - Efficient architecture representation using NetworkX
 - Fast performance estimation using proxy model
 - Configurable population size and generations
@@ -50,7 +50,7 @@ The framework is designed for minimal ACU (Analog Compute Unit) consumption:
 2. Proxy Model
    - Hardware-aware performance estimation
    - Fast architecture evaluation
-   - ACU consumption monitoring
+   - Hardware resource monitoring
 
 3. Evolution Search
    - Population-based optimization
@@ -62,7 +62,7 @@ The framework is designed for minimal ACU (Analog Compute Unit) consumption:
 Modify `config.py` parameters to adjust:
 - Search space constraints
 - Evolution parameters
-- Hardware constraints (ACU limits)
+- Hardware constraints (resource limits)
 
 ## Testing
 

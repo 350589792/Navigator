@@ -52,7 +52,7 @@ def main():
     # Create model
     print(f"Creating {args.model} model...")
     model = get_model(args.model, num_classes)
-    print(f"Estimated ACU consumption: {model.get_acu_consumption():.2f}")
+    print(f"Estimated hardware cost: {model.get_hardware_cost():.2f}")
 
     # Test forward pass
     print("\nTesting forward pass...")

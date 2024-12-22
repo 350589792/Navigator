@@ -9,7 +9,7 @@ def main():
     config = get_config()
     config['evolution']['population_size'] = 5  # Small population for quick test
     config['evolution']['generations'] = 2      # Few generations for quick test
-    config['hardware']['max_acu'] = 500        # Limited ACU for efficiency
+    config['hardware']['max_resources'] = 500  # Limited hardware resources for efficiency
     
     print(f"Platform: {os.name}")  # Show which platform we're running on
     print("Starting AnalogNAS search with minimal configuration...")

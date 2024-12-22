@@ -22,7 +22,7 @@ def get_config(config_path=None):
             'crossover_prob': 0.5,
         },
         'hardware': {
-            'max_acu': 1000,  # Arbitrary unit for analog compute
+            'max_resources': 1000,  # Arbitrary unit for hardware resources
             'target_platform': 'analog',
         }
     }
