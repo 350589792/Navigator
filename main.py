@@ -57,6 +57,8 @@ def main():
 
         # 预处理数据
         logger.info("开始数据预处理...")
+        # 确保创建时间特征
+        data = preprocessor.create_time_features(data)
         processed_data = preprocessor.prepare_full_dataset(
             data,
             sequence_length=config.get_data_config()['sequence_length'],
@@ -67,20 +69,29 @@ def main():
 
         # 5. 初始化模型
         logger.info("初始化模型...")
-        model_config = config.get_model_config()
-
+        input_dim = X_train.shape[-1]  # 使用预处理后的特征维度
+        logger.info(f"Input dimension from data: {input_dim}")
+        
+        # 更新模型配置
+        config.config['model']['ai']['input_size'] = input_dim
+        
         # AI模型
         ai_model = GlassFurnaceModel(
-            input_size=model_config['ai_model']['input_size'],
-            hidden_size=model_config['ai_model']['hidden_size'],
-            num_layers=model_config['ai_model']['num_layers']
+            input_size=input_dim,
+            hidden_size=config.config['model']['ai']['hidden_size'],
+            num_layers=config.config['model']['ai']['num_layers']
         ).to(device)
 
         # CFD模型
-        cfd_model = CFDSimulator(model_config['cfd_model'])
+        cfd_model = CFDSimulator(config.config['model']['cfd'])
 
         # 混合模型
-        hybrid_model = HybridModel(ai_model, cfd_model, model_config['hybrid_model'])
+        hybrid_model = HybridModel(
+            ai_model=ai_model,
+            cfd_model=cfd_model,
+            config=config.config['model']['hybrid'],
+            device=device
+        )
 
         # 6. 训练模型
         logger.info("开始模型训练...")

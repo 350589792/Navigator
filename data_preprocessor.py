@@ -43,18 +43,34 @@ class DataPreprocessor:
 
     def prepare_sequences(self, data, sequence_length, target_col):
         """准备时间序列数据"""
+        # 确保包含所有必要的特征列
+        required_features = [
+            'bottom_temperature', 'heavy_oil_flow', 'natural_gas_flow',
+            'air_ratio', 'air_oil_ratio', 'hour_sin', 'hour_cos',
+            'day_sin', 'day_cos', 'month_sin', 'month_cos',
+            'vault_temperature', 'inlet_temperature', 'outlet_temperature'
+        ]
+        
+        # 检查并创建缺失的列
+        for col in required_features:
+            if col not in data.columns:
+                if col in ['hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'month_sin', 'month_cos']:
+                    continue  # 这些列会在create_time_features中创建
+                else:
+                    data[col] = 0.0  # 用0填充缺失的列
+        
         sequences = []
         targets = []
 
         for i in range(len(data) - sequence_length):
-            # 提取序列
-            seq = data.iloc[i:(i + sequence_length)]
-            target = data.iloc[i + sequence_length][target_col]
+            # 提取序列，使用所有必要的特征并确保float32类型
+            seq = data.iloc[i:(i + sequence_length)][required_features].astype(np.float32)
+            target = np.float32(data.iloc[i + sequence_length][target_col])
 
             sequences.append(seq.values)
             targets.append(target)
 
-        return np.array(sequences), np.array(targets)
+        return np.array(sequences, dtype=np.float32), np.array(targets, dtype=np.float32)
 
     def split_data(self, X, y, train_ratio=0.7, val_ratio=0.15):
         """划分数据集"""
