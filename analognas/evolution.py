@@ -42,16 +42,37 @@ class Evolution:
             return parent1
         return parent2
     
+    def simulate_long_term(self, architecture: nx.DiGraph, time_points=[0, 1, 30]) -> float:
+        """
+        Simulate architecture performance over multiple time points.
+        
+        Args:
+            architecture: Network architecture to evaluate
+            time_points: List of time points (in days) to evaluate at
+            
+        Returns:
+            float: Combined stability score across time points
+        """
+        scores = []
+        for t in time_points:
+            # Evaluate performance with time-based drift effects
+            score = self.proxy_model.estimate_performance(architecture, time_factor=t)
+            scores.append(score)
+        
+        # Weight recent performance more heavily
+        weights = np.array([0.2, 0.3, 0.5])  # More weight on long-term stability
+        return np.average(scores, weights=weights)
+    
     def search(self) -> nx.DiGraph:
-        """Perform architecture search."""
+        """Perform architecture search with long-term stability consideration."""
         population = self.initialize_population()
         best_architecture = None
         best_score = -float('inf')
         
         for _ in range(self.generations):
-            # Evaluate population
+            # Evaluate population with long-term stability
             scores = [
-                self.proxy_model.estimate_performance(arch)
+                self.simulate_long_term(arch)
                 for arch in population
             ]
             

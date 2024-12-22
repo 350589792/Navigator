@@ -40,7 +40,7 @@ class ProxyModel:
         # Higher precision requires more hardware resources
         return self.precision_bits / 8.0  # Normalized to 1.0 at 8-bit precision
     
-    def estimate_performance(self, architecture: nx.DiGraph) -> float:
+    def estimate_performance(self, architecture: nx.DiGraph, time_factor: float = 0.0) -> float:
         """Estimate architecture performance considering hardware constraints."""
         # Calculate total hardware resource consumption with precision scaling
         total_resources = 0
@@ -74,8 +74,8 @@ class ProxyModel:
         depth_score = min(1.0, num_nodes / 50)  # Assume max depth of 50
         width_score = min(1.0, avg_channels / 512)  # Assume max width of 512
         
-        # Calculate drift penalty if enabled
-        drift_penalty = self._calculate_drift_penalty(total_resources) if self.enable_drift else 0.0
+        # Calculate drift penalty if enabled, using time factor
+        drift_penalty = self._calculate_drift_penalty(total_resources, time_factor) if self.enable_drift else 0.0
         
         # Combined score with hardware-aware adjustments
         base_score = 0.4 * depth_score + 0.6 * width_score
