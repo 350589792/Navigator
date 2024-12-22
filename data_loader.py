@@ -127,7 +127,7 @@ class DataLoader:
         
         # Create DataFrame with generated data
         temperature_data = pd.DataFrame({
-            '时间戳': dates,
+            'timestamp': dates,  # Use English column name for consistency
             '拱顶温度': vault_temp,
             '炉底温度': bottom_temp,
             '炉壁温度': side_temp,
