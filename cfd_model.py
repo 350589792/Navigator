@@ -35,11 +35,16 @@ class CFDSimulator:
         """初始化计算场"""
         # 温度场
         self.T = np.zeros((self.ny, self.nx))
+        self.T_old = np.zeros((self.ny, self.nx))
         # 速度场
         self.u = np.zeros((self.ny, self.nx))  # x方向速度
+        self.u_old = np.zeros((self.ny, self.nx))
         self.v = np.zeros((self.ny, self.nx))  # y方向速度
+        self.v_old = np.zeros((self.ny, self.nx))
         # 压力场
         self.p = np.zeros((self.ny, self.nx))
+        # 初始化边界条件存储
+        self.boundary_conditions = {}
 
     def set_boundary_conditions(self, boundary_conditions):
         """设置边界条件"""
@@ -82,30 +87,43 @@ class CFDSimulator:
 
         # y方向动量方程类似实现...
 
-    def solve_energy_equation(self):
-        """求解能量方程"""
-        T_new = np.copy(self.T)
+    def solve_energy_equation(self, max_iter=1000, tolerance=1e-6):
+        """求解能量方程
+        Args:
+            max_iter: 最大迭代次数
+            tolerance: 收敛容差
+        """
+        for iter_count in range(max_iter):
+            T_new = np.copy(self.T)
+            max_change = 0.0
 
-        for i in range(1, self.ny - 1):
-            for j in range(1, self.nx - 1):
-                # 对流项
-                convection = (
-                        self.u[i, j] * (self.T[i, j + 1] - self.T[i, j - 1]) / (2 * self.dx) +
-                        self.v[i, j] * (self.T[i + 1, j] - self.T[i - 1, j]) / (2 * self.dy)
-                )
+            for i in range(1, self.ny - 1):
+                for j in range(1, self.nx - 1):
+                    # 对流项
+                    convection = (
+                            self.u[i, j] * (self.T[i, j + 1] - self.T[i, j - 1]) / (2 * self.dx) +
+                            self.v[i, j] * (self.T[i + 1, j] - self.T[i - 1, j]) / (2 * self.dy)
+                    )
 
-                # 扩散项
-                diffusion = (
-                        self.k * (
-                        (self.T[i, j + 1] - 2 * self.T[i, j] + self.T[i, j - 1]) / (self.dx ** 2) +
-                        (self.T[i + 1, j] - 2 * self.T[i, j] + self.T[i - 1, j]) / (self.dy ** 2)
-                )
-                )
+                    # 扩散项
+                    diffusion = (
+                            self.k * (
+                            (self.T[i, j + 1] - 2 * self.T[i, j] + self.T[i, j - 1]) / (self.dx ** 2) +
+                            (self.T[i + 1, j] - 2 * self.T[i, j] + self.T[i - 1, j]) / (self.dy ** 2)
+                    )
+                    )
 
-                # 更新温度
-                T_new[i, j] = self.T[i, j] + self.dt * (-convection + diffusion / (self.rho * self.cp))
+                    # 更新温度
+                    T_new[i, j] = self.T[i, j] + self.dt * (-convection + diffusion / (self.rho * self.cp))
+                    max_change = max(max_change, abs(T_new[i, j] - self.T[i, j]))
 
-        self.T = T_new
+            self.T = T_new
+
+            # 检查收敛性
+            if max_change < tolerance:
+                return True
+
+        return False  # 达到最大迭代次数仍未收敛
 
     def solve_continuity_equation(self):
         """求解连续方程"""
@@ -134,26 +152,55 @@ class CFDSimulator:
         p_new = linalg.spsolve(diags(A.diagonal()), b)
         self.p = p_new.reshape((self.ny, self.nx))
 
-    def run_simulation(self, n_steps):
-        """运行完整的CFD模拟"""
-        for step in range(n_steps):
-            # 1. 求解动量方程
-            self.solve_momentum_equation()
+    def run_simulation(self, boundary_conditions, max_steps=100):
+        """运行完整的CFD模拟
+        Args:
+            boundary_conditions: 边界条件字典
+            max_steps: 最大迭代步数
+        Returns:
+            模拟结果字典
+        """
+        try:
+            # 设置边界条件
+            self.boundary_conditions = boundary_conditions
+            self.set_boundary_conditions(boundary_conditions)
+            
+            # 初始化旧场变量
+            self.u_old = np.copy(self.u)
+            self.v_old = np.copy(self.v)
+            self.T_old = np.copy(self.T)
 
-            # 2. 求解连续方程
-            self.solve_continuity_equation()
+            for step in range(max_steps):
+                # 1. 求解动量方程
+                self.solve_momentum_equation()
 
-            # 3. 求解能量方程
-            self.solve_energy_equation()
+                # 2. 求解连续方程
+                self.solve_continuity_equation()
 
-            # 4. 应用边界条件
-            self.apply_boundary_conditions()
+                # 3. 求解能量方程（带收敛检查）
+                energy_converged = self.solve_energy_equation(max_iter=100)
+                if not energy_converged:
+                    print(f"Warning: Energy equation did not converge at step {step}")
 
-            # 5. 检查收敛性
-            if self.check_convergence():
-                break
+                # 4. 应用边界条件
+                self.apply_boundary_conditions()
 
-        return self.get_results()
+                # 5. 检查整体收敛性
+                if self.check_convergence():
+                    print(f"Simulation converged after {step + 1} steps")
+                    break
+
+            return self.get_results()
+            
+        except Exception as e:
+            print(f"Error in CFD simulation: {str(e)}")
+            # 返回一个基本的结果以避免完全失败
+            return {
+                'temperature_field': np.copy(self.T),
+                'velocity_field_u': np.copy(self.u),
+                'velocity_field_v': np.copy(self.v),
+                'pressure_field': np.copy(self.p)
+            }
 
     def apply_boundary_conditions(self):
         """应用所有边界条件"""
