@@ -128,23 +128,33 @@ class DataLoader:
         # Create DataFrame with generated data
         temperature_data = pd.DataFrame({
             'timestamp': dates,  # Use English column name for consistency
-            '拱顶温度': vault_temp,
-            '炉底温度': bottom_temp,
-            '炉壁温度': side_temp,
-            '熔化温度': melting_temp
+            'vault_temperature': vault_temp,    # 拱顶温度
+            'bottom_temperature': bottom_temp,  # 炉底温度
+            'side_temperature': side_temp,      # 炉壁温度
+            'melting_temperature': melting_temp # 熔化温度
         })
         
         # Add some realistic constraints
         # Ensure vault temperature is always highest
-        temperature_data['拱顶温度'] = temperature_data[['拱顶温度', '炉底温度', '炉壁温度', '熔化温度']].max(axis=1) + 50
+        temperature_data['vault_temperature'] = temperature_data[['vault_temperature', 'bottom_temperature', 
+                                                                'side_temperature', 'melting_temperature']].max(axis=1) + 50
         # Ensure melting temperature is always lowest
-        temperature_data['熔化温度'] = temperature_data[['拱顶温度', '炉底温度', '炉壁温度', '熔化温度']].min(axis=1) - 50
+        temperature_data['melting_temperature'] = temperature_data[['vault_temperature', 'bottom_temperature', 
+                                                                  'side_temperature', 'melting_temperature']].min(axis=1) - 50
         
         print("\nGenerated temperature data statistics:")
         print(f"Number of records: {len(temperature_data)}")
         print("\nTemperature ranges (°C):")
+        # Create a mapping for display names
+        display_names = {
+            'vault_temperature': '拱顶温度',
+            'bottom_temperature': '炉底温度',
+            'side_temperature': '炉壁温度',
+            'melting_temperature': '熔化温度'
+        }
         for col in temperature_data.columns[1:]:
-            print(f"{col}: {temperature_data[col].min():.1f} - {temperature_data[col].max():.1f}")
+            display_name = display_names.get(col, col)
+            print(f"{display_name}: {temperature_data[col].min():.1f} - {temperature_data[col].max():.1f}")
         
         return temperature_data
 
