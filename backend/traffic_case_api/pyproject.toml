@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "app"
+version = "0.1.0"
+description = ""
+authors = ["Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+aiofiles = "^23.2.1"
+fastapi = {extras = ["standard"], version = "^0.115.6"}
+psycopg = {extras = ["binary"], version = "^3.2.3"}
+jieba = "^0.42.1"
+scikit-learn = "^1.6.0"
+pandas = "^2.2.3"
+pydantic = "^2.10.4"
+aiohttp = "^3.9.3"
+beautifulsoup4 = "^4.12.3"
+aiohttp-retry = "^2.8.3"
+tenacity = "^8.2.3"
+aiohttp-proxy = "^0.1.2"
+lxml = "^5.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
