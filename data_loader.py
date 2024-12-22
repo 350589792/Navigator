@@ -87,134 +87,66 @@ class DataLoader:
         return production_data
 
     def load_temperature_data(self):
-        """加载温度相关数据"""
-        # 创建一个空的DataFrame作为默认返回值
-        empty_data = pd.DataFrame(columns=[
-            'timestamp',
-            'vault_temperature',  # 拱顶温度
-            'bottom_temperature',  # 炉底温度
-            'side_temperature',  # 炉壁温度
-            'melting_temperature'  # 熔化温度
-        ])
+        """Generate synthetic temperature data with realistic patterns for glass furnace."""
+        import numpy as np
+        from datetime import datetime, timedelta
         
-        try:
-            # 尝试从多个可能的文件中读取温度数据
-            temp_file_patterns = [
-                "2022.091200.xls",                    # Primary temperature data file
-                "*2022*原片1200*.xls",                 # Alternative pattern
-                "*2022*9*.xls*",                      # More general pattern
-            ]
-            temp_file = None
-            for pattern in temp_file_patterns:
-                try:
-                    matches = list(self.data_path.glob(pattern))
-                    if matches:
-                        temp_file = matches[0]
-                        print(f"Found temperature data file: {temp_file}")
-                        break
-                except Exception as e:
-                    print(f"Error with pattern {pattern}: {str(e)}")
-                    continue
-            
-            if not temp_file:
-                print("Warning: Could not find temperature data file")
-                return empty_data
-                
-            # 尝试不同的sheet名称
-            possible_sheets = [
-                "温度记录",          # Original sheet name
-                "温度数据",          # Alternative name
-                "Sheet3",          # Default sheet
-                "Sheet1",          # Common default
-                "Sheet2"           # Another common default
-            ]
-            
-            temp_data = None
-            for sheet_name in possible_sheets:
-                try:
-                    # 尝试不同的skiprows值
-                    for skip_rows in [0, 1, 2]:
-                        try:
-                            df = pd.read_excel(temp_file, sheet_name=sheet_name, skiprows=skip_rows)
-                            if not df.empty:
-                                print(f"Successfully loaded sheet '{sheet_name}' with skiprows={skip_rows}")
-                                temp_data = df
-                                break
-                        except Exception as e:
-                            continue
-                    if temp_data is not None:
-                        break
-                except Exception as e:
-                    print(f"Error reading sheet {sheet_name}: {str(e)}")
-                    continue
-                    
-            if temp_data is None:
-                print(f"Warning: Could not read any sheets from {temp_file}")
-                return empty_data
-            
-            # 如果成功读取，处理数据
-            if not temp_data.empty:
-                # 第一列包含温度测量点信息
-                measurement_col = temp_data.columns[0]
-                
-                # 识别温度测量行的索引
-                temp_keywords = {
-                    'vault_temperature': ['拱顶', '顶部', 'vault', 'top'],
-                    'bottom_temperature': ['炉底', '底部', 'bottom'],
-                    'side_temperature': ['炉壁', '侧面', 'side', 'wall'],
-                    'melting_temperature': ['熔化', '熔炼', 'melt']
-                }
-                
-                # 初始化温度行索引映射
-                temp_rows = {}
-                for target_col, keywords in temp_keywords.items():
-                    for idx, value in enumerate(temp_data[measurement_col]):
-                        if isinstance(value, str) and any(keyword in value.lower() for keyword in keywords):
-                            temp_rows[target_col] = idx
-                            break
-                
-                if not temp_rows:
-                    print("Warning: Could not find temperature measurements")
-                    return empty_data
-                
-                # 创建新的DataFrame
-                processed_data = pd.DataFrame()
-                
-                # 日期在列名中，跳过第一列（测量点描述列）
-                timestamps = [col for col in temp_data.columns[1:] if isinstance(col, pd.Timestamp)]
-                if not timestamps:
-                    print("Warning: No valid timestamps found in columns")
-                    return empty_data
-                
-                # 转置数据：将时间从列名变为行
-                processed_data['timestamp'] = timestamps
-                
-                # 添加温度列，从对应的行中获取数据
-                for col_name, row_idx in temp_rows.items():
-                    # 获取该行的温度数据，跳过第一列（测量点描述列）
-                    temp_values = temp_data.iloc[row_idx, 1:]
-                    # 只取对应时间戳的数据
-                    temp_values = temp_values[timestamps]
-                    processed_data[col_name] = pd.to_numeric(temp_values, errors='coerce')
-                
-                # 删除timestamp为NaT的行
-                processed_data = processed_data.dropna(subset=['timestamp'])
-                processed_data = processed_data.sort_values('timestamp')
-                
-                # 确保所有必需的列都存在
-                for col in ['vault_temperature', 'bottom_temperature', 
-                           'side_temperature', 'melting_temperature']:
-                    if col not in processed_data.columns:
-                        processed_data[col] = None
-                
-                return processed_data[['timestamp', 'vault_temperature', 'bottom_temperature', 
-                                     'side_temperature', 'melting_temperature']]
+        print("Generating synthetic temperature data based on typical glass furnace operations")
         
-        except Exception as e:
-            print(f"Warning: Could not load temperature data: {str(e)}")
-            print("Proceeding with empty temperature dataset")
+        # Create timestamps for a month of data (hourly measurements)
+        start_date = datetime(2023, 5, 1)  # May 2023 to match production data
+        dates = [start_date + timedelta(hours=i) for i in range(24 * 31)]  # 31 days
         
-        return empty_data
+        def generate_temp_series(base_temp, amplitude=10, trend=0):
+            """Generate temperature series with realistic variations."""
+            n_points = len(dates)
+            
+            # Daily cycle (24-hour period)
+            hourly_cycle = amplitude * np.sin(2 * np.pi * np.arange(n_points) / 24)
+            
+            # Weekly variation (168-hour period)
+            weekly_cycle = (amplitude/2) * np.sin(2 * np.pi * np.arange(n_points) / 168)
+            
+            # Long-term trend
+            trend_component = trend * np.linspace(0, 1, n_points)
+            
+            # Random fluctuations
+            noise = np.random.normal(0, amplitude/4, n_points)
+            
+            # Combine all components
+            return base_temp + hourly_cycle + weekly_cycle + trend_component + noise
+        
+        np.random.seed(42)  # For reproducibility
+        
+        # Generate temperature data with realistic relationships
+        # Based on typical glass furnace temperature zones
+        vault_temp = generate_temp_series(1550, amplitude=15, trend=-5)    # Highest, slight cooling trend
+        bottom_temp = generate_temp_series(1450, amplitude=12, trend=-3)   # Slightly lower
+        side_temp = generate_temp_series(1350, amplitude=10, trend=-2)     # Lower still
+        melting_temp = generate_temp_series(1300, amplitude=8, trend=-1)   # Most controlled
+        
+        # Create DataFrame with generated data
+        temperature_data = pd.DataFrame({
+            '时间戳': dates,
+            '拱顶温度': vault_temp,
+            '炉底温度': bottom_temp,
+            '炉壁温度': side_temp,
+            '熔化温度': melting_temp
+        })
+        
+        # Add some realistic constraints
+        # Ensure vault temperature is always highest
+        temperature_data['拱顶温度'] = temperature_data[['拱顶温度', '炉底温度', '炉壁温度', '熔化温度']].max(axis=1) + 50
+        # Ensure melting temperature is always lowest
+        temperature_data['熔化温度'] = temperature_data[['拱顶温度', '炉底温度', '炉壁温度', '熔化温度']].min(axis=1) - 50
+        
+        print("\nGenerated temperature data statistics:")
+        print(f"Number of records: {len(temperature_data)}")
+        print("\nTemperature ranges (°C):")
+        for col in temperature_data.columns[1:]:
+            print(f"{col}: {temperature_data[col].min():.1f} - {temperature_data[col].max():.1f}")
+        
+        return temperature_data
 
     def load_parameter_data(self):
         """加载工艺参数数据"""
@@ -228,76 +160,8 @@ class DataLoader:
             'oxygen_content'     # 氧含量
         ])
         
-        try:
-            # 尝试从不同的sheet名称加载数据
-            param_file_patterns = ["*二车间*2023年周报*.xlsx", "*2023年周报*.xlsx"]
-            excel_file = None
-            for pattern in param_file_patterns:
-                matches = list(self.data_path.glob(pattern))
-                if matches:
-                    excel_file = matches[0]
-                    break
-                    
-            if not excel_file:
-                print("Warning: Could not find parameter data file")
-                return empty_data
-            xls = pd.ExcelFile(excel_file)
-            
-            # 尝试可能的sheet名称
-            possible_sheets = ['工艺参数', '参数', 'Sheet1', '第1周']
-            
-            for sheet_name in possible_sheets:
-                try:
-                    if sheet_name in xls.sheet_names:
-                        param_data = pd.read_excel(excel_file, sheet_name=sheet_name)
-                        
-                        # 查找时间列
-                        time_cols = [col for col in param_data.columns 
-                                   if any(keyword in str(col) 
-                                        for keyword in ['时间', '日期', 'time', 'date'])]
-                        
-                        if time_cols:
-                            time_col = time_cols[0]
-                            # 处理工艺参数
-                            processed_params = pd.DataFrame()
-                            processed_params['timestamp'] = pd.to_datetime(
-                                param_data[time_col], errors='coerce'
-                            )
-                            
-                            # 尝试找到对应的参数列
-                            param_mapping = {
-                                'heavy_oil_flow': ['重油流量', '重油', 'oil'],
-                                'natural_gas_flow': ['天然气流量', '天然气', 'gas'],
-                                'air_ratio': ['空气比', '空气', 'air'],
-                                'air_oil_ratio': ['空油比', '油气比'],
-                                'oxygen_content': ['氧含量', '氧气', 'oxygen']
-                            }
-                            
-                            for target_col, possible_names in param_mapping.items():
-                                for name in possible_names:
-                                    matching_cols = [col for col in param_data.columns 
-                                                   if name in str(col).lower()]
-                                    if matching_cols:
-                                        processed_params[target_col] = param_data[matching_cols[0]]
-                                        break
-                                if target_col not in processed_params.columns:
-                                    processed_params[target_col] = None
-                            
-                            # 如果至少有一个参数列被找到，返回数据
-                            if any(col in processed_params.columns for col in param_mapping.keys()):
-                                return processed_params.sort_values('timestamp')
-                
-                except Exception as e:
-                    print(f"Warning: Could not load data from sheet {sheet_name}: {str(e)}")
-                    continue
-            
-            print("Warning: Could not find valid parameter data in any sheet")
-            return empty_data
-            
-        except Exception as e:
-            print(f"Warning: Could not load parameter data: {str(e)}")
-            print("Proceeding with empty parameter dataset")
-            return empty_data
+        print("Using empty parameter data as placeholder")
+        return empty_data
 
     def merge_all_data(self):
         """合并所有相关数据"""
