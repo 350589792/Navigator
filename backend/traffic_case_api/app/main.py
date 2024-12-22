@@ -7,9 +7,27 @@ from sklearn.metrics.pairwise import cosine_similarity
 from .models import CaseInput, CaseAnalysisResponse, LawReference, SimilarCase
 from .data_manager import CaseDataManager
 from .scraper import TrafficCaseScraper
-from .utils import custom_tokenizer  # Import our custom tokenizer
+from .similarity import get_similar_cases  # Import similarity calculation module
 
-app = FastAPI()
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """处理应用程序的生命周期事件"""
+    # 启动时初始化
+    app.state.data_manager = await CaseDataManager.create()
+    app.state.case_scraper = await TrafficCaseScraper.create(test_mode=True)
+    cases = await app.state.data_manager.get_all_cases()
+    if not cases:
+        await app.state.case_scraper.update_case_database()
+    yield
+    # 关闭时清理
+    if hasattr(app.state, 'data_manager'):
+        await app.state.data_manager.clear_database()
+    app.state.data_manager = None
+    app.state.case_scraper = None
+
+app = FastAPI(lifespan=lifespan)
 
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
@@ -20,24 +38,6 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-# Initialize data manager and scraper
-data_manager = None
-case_scraper = None
-
-# Initialize the database with real cases if empty
-@app.on_event("startup")
-async def initialize_database():
-    global data_manager, case_scraper
-    data_manager = await CaseDataManager.create()
-    case_scraper = await TrafficCaseScraper.create(test_mode=True)
-    cases = await data_manager.get_all_cases()
-    if not cases:
-        await case_scraper.update_case_database()
-
-def preprocess_text(text: str) -> str:
-    """对中文文本进行预处理，使用自定义分词器"""
-    return " ".join(custom_tokenizer(text))
-
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
@@ -46,34 +46,17 @@ async def healthz():
 async def analyze_case(case_input: CaseInput, background_tasks: BackgroundTasks):
     """分析交通事故案例，返回相关法条和相似案例"""
     # Get all cases from the database
-    all_cases = await data_manager.get_all_cases()
+    all_cases = await app.state.data_manager.get_all_cases()
     
     # Process the input case
     case_texts = [case["content"] for case in all_cases]
     case_texts.append(case_input.case_text)
     
-    # Convert texts to TF-IDF vectors using custom tokenizer for better drunk driving detection
-    vectorizer = TfidfVectorizer(tokenizer=custom_tokenizer)
-    tfidf_matrix = vectorizer.fit_transform(case_texts)
-    
-    # Calculate similarity between input case and all other cases
-    similarities = cosine_similarity(tfidf_matrix[-1:], tfidf_matrix[:-1])[0]
-    
-    # Get top 3 similar cases
-    similar_cases = []
-    top_indices = np.argsort(similarities)[-3:][::-1]
-    for idx in top_indices:
-        case = all_cases[idx]
-        similar_cases.append(
-            SimilarCase(
-                title=case["title"],
-                summary=case["content"][:200] + "..." if len(case["content"]) > 200 else case["content"],
-                similarity_score=float(similarities[idx])
-            )
-        )
+    # 使用相似度计算模块获取相似案例
+    similar_cases = get_similar_cases(case_input.case_text, all_cases)
     
     # Get relevant laws from the database
-    all_laws = await data_manager.get_all_laws()
+    all_laws = await app.state.data_manager.get_all_laws()
     relevant_laws = []
     for category in all_laws:
         for law in all_laws[category]:
@@ -86,7 +69,7 @@ async def analyze_case(case_input: CaseInput, background_tasks: BackgroundTasks)
             )
     
     # Schedule background task to update cases
-    background_tasks.add_task(case_scraper.update_case_database)
+    background_tasks.add_task(app.state.case_scraper.update_case_database)
     
     return CaseAnalysisResponse(
         relevant_laws=relevant_laws,
