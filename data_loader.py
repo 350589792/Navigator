@@ -100,12 +100,9 @@ class DataLoader:
         try:
             # 尝试从多个可能的文件中读取温度数据
             temp_file_patterns = [
-                "深加工二车间2022年9月份生产日报表.xlsx",  # Original file
-                "*深加工*二车间*2022*9*.xlsx",           # Flexible pattern for original
-                "*2022*9*.xls*",                      # More general pattern
-                "2022.091200.xls",                    # Alternative file
+                "2022.091200.xls",                    # Primary temperature data file
                 "*2022*原片1200*.xls",                 # Alternative pattern
-                "*2022*.xls*"                         # Most general pattern
+                "*2022*9*.xls*",                      # More general pattern
             ]
             temp_file = None
             for pattern in temp_file_patterns:
