@@ -1,7 +1,8 @@
 import pytest
-import numpy as np
+from fastapi.testclient import TestClient
 from app.similarity import SimilarityAnalyzer
 from app.utils import custom_tokenizer
+from app.models import Case
 
 def test_similarity_threshold():
     """测试相似度阈值过滤"""
@@ -57,3 +58,60 @@ def test_feature_weighting():
     # 验证结果
     assert "酒后" in similar_cases[0][0]["content"]  # 应该优先匹配酒驾案例
     assert similar_cases[0][1] > 0.2  # 特征标记应该提供更高的相似度分数
+
+def test_speeding_case_analysis(test_client, sample_cases):
+    """测试超速案例分析"""
+    response = test_client.post(
+        "/analyze_case",
+        json={"content": sample_cases["speeding"]["content"]}
+    )
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "similar_cases" in data
+    assert len(data["similar_cases"]) > 0
+    assert any("120公里/小时" in case["content"] for case in data["similar_cases"])
+    assert all(case["similarity_score"] >= 0.15 for case in data["similar_cases"] 
+              if "similarity_score" in case)
+    
+    # 验证法条推荐
+    assert "relevant_laws" in data
+    assert all(law in data["relevant_laws"] 
+              for law in sample_cases["speeding"]["expected_laws"])
+
+def test_drunk_driving_analysis(test_client, sample_cases):
+    """测试酒驾案例分析"""
+    response = test_client.post(
+        "/analyze_case",
+        json={"content": sample_cases["drunk_driving"]["content"]}
+    )
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "similar_cases" in data
+    assert len(data["similar_cases"]) > 0
+    assert any("酒后" in case["content"] or "醉酒" in case["content"] 
+              for case in data["similar_cases"])
+    
+    # 验证法条推荐
+    assert "relevant_laws" in data
+    assert all(law in data["relevant_laws"] 
+              for law in sample_cases["drunk_driving"]["expected_laws"])
+
+def test_hit_and_run_analysis(test_client, sample_cases):
+    """测试肇事逃逸案例分析"""
+    response = test_client.post(
+        "/analyze_case",
+        json={"content": sample_cases["hit_and_run"]["content"]}
+    )
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "similar_cases" in data
+    assert len(data["similar_cases"]) > 0
+    assert any("逃逸" in case["content"] for case in data["similar_cases"])
+    
+    # 验证法条推荐
+    assert "relevant_laws" in data
+    assert all(law in data["relevant_laws"] 
+              for law in sample_cases["hit_and_run"]["expected_laws"])
