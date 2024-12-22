@@ -45,26 +45,41 @@ class DataLoader:
         
         try:
             # 加载2022年9月数据
-            file_2022 = self.data_path / "2022.091200.xls"
-            for sheet_name in possible_sheets:
-                try:
-                    sept_2022_data = pd.read_excel(file_2022, sheet_name=sheet_name)
-                    production_data['2022_09'] = self._process_production_sheet(sept_2022_data)
+            file_2022_patterns = ["2022.091200.xls", "*2022*原片1200*.xls"]
+            file_2022 = None
+            for pattern in file_2022_patterns:
+                matches = list(self.data_path.glob(pattern))
+                if matches:
+                    file_2022 = matches[0]
                     break
-                except Exception as e:
-                    print(f"Warning: Could not load sheet {sheet_name} from {file_2022}: {str(e)}")
-                    continue
+            
+            if file_2022:
+                for sheet_name in possible_sheets:
+                    try:
+                        sept_2022_data = pd.read_excel(file_2022, sheet_name=sheet_name)
+                        production_data['2022_09'] = self._process_production_sheet(sept_2022_data)
+                        break
+                    except Exception as e:
+                        print(f"Warning: Could not load sheet {sheet_name} from {file_2022}: {str(e)}")
+                        continue
             
             # 加载2023年5月数据
-            file_2023 = self.data_path / "2023年5月熔洗1200吨趋势生产统计报表.xlsx"
-            for sheet_name in possible_sheets:
-                try:
-                    may_2023_data = pd.read_excel(file_2023, sheet_name=sheet_name)
-                    production_data['2023_05'] = self._process_production_sheet(may_2023_data)
+            file_2023_patterns = ["*2023*5*熔洗1200*.xlsx", "*2023*5月*.xlsx"]
+            file_2023 = None
+            for pattern in file_2023_patterns:
+                matches = list(self.data_path.glob(pattern))
+                if matches:
+                    file_2023 = matches[0]
                     break
-                except Exception as e:
-                    print(f"Warning: Could not load sheet {sheet_name} from {file_2023}: {str(e)}")
-                    continue
+            if file_2023:
+                for sheet_name in possible_sheets:
+                    try:
+                        may_2023_data = pd.read_excel(file_2023, sheet_name=sheet_name)
+                        production_data['2023_05'] = self._process_production_sheet(may_2023_data)
+                        break
+                    except Exception as e:
+                        print(f"Warning: Could not load sheet {sheet_name} from {file_2023}: {str(e)}")
+                        continue
             
         except Exception as e:
             print(f"Warning: Error loading production data: {str(e)}")
@@ -83,32 +98,120 @@ class DataLoader:
         ])
         
         try:
-            # 尝试从Sheet3读取温度数据
-            temp_data = pd.read_excel(
-                self.data_path / "2022.091200.xls",
-                sheet_name="Sheet3"
-            )
+            # 尝试从多个可能的文件中读取温度数据
+            temp_file_patterns = [
+                "深加工二车间2022年9月份生产日报表.xlsx",  # Original file
+                "*深加工*二车间*2022*9*.xlsx",           # Flexible pattern for original
+                "*2022*9*.xls*",                      # More general pattern
+                "2022.091200.xls",                    # Alternative file
+                "*2022*原片1200*.xls",                 # Alternative pattern
+                "*2022*.xls*"                         # Most general pattern
+            ]
+            temp_file = None
+            for pattern in temp_file_patterns:
+                try:
+                    matches = list(self.data_path.glob(pattern))
+                    if matches:
+                        temp_file = matches[0]
+                        print(f"Found temperature data file: {temp_file}")
+                        break
+                except Exception as e:
+                    print(f"Error with pattern {pattern}: {str(e)}")
+                    continue
+            
+            if not temp_file:
+                print("Warning: Could not find temperature data file")
+                return empty_data
+                
+            # 尝试不同的sheet名称
+            possible_sheets = [
+                "温度记录",          # Original sheet name
+                "温度数据",          # Alternative name
+                "Sheet3",          # Default sheet
+                "Sheet1",          # Common default
+                "Sheet2"           # Another common default
+            ]
+            
+            temp_data = None
+            for sheet_name in possible_sheets:
+                try:
+                    # 尝试不同的skiprows值
+                    for skip_rows in [0, 1, 2]:
+                        try:
+                            df = pd.read_excel(temp_file, sheet_name=sheet_name, skiprows=skip_rows)
+                            if not df.empty:
+                                print(f"Successfully loaded sheet '{sheet_name}' with skiprows={skip_rows}")
+                                temp_data = df
+                                break
+                        except Exception as e:
+                            continue
+                    if temp_data is not None:
+                        break
+                except Exception as e:
+                    print(f"Error reading sheet {sheet_name}: {str(e)}")
+                    continue
+                    
+            if temp_data is None:
+                print(f"Warning: Could not read any sheets from {temp_file}")
+                return empty_data
             
             # 如果成功读取，处理数据
             if not temp_data.empty:
-                # 第一列是日期/批号，其他列是温度数据
-                date_col = temp_data.columns[0]
-                temp_cols = temp_data.columns[1:5]  # 取前4列温度数据
+                # 第一列包含温度测量点信息
+                measurement_col = temp_data.columns[0]
                 
-                # 重命名温度列
-                temp_data = temp_data.rename(columns={
-                    temp_cols[0]: 'vault_temperature',
-                    temp_cols[1]: 'bottom_temperature',
-                    temp_cols[2]: 'side_temperature',
-                    temp_cols[3]: 'melting_temperature'
-                })
+                # 识别温度测量行的索引
+                temp_keywords = {
+                    'vault_temperature': ['拱顶', '顶部', 'vault', 'top'],
+                    'bottom_temperature': ['炉底', '底部', 'bottom'],
+                    'side_temperature': ['炉壁', '侧面', 'side', 'wall'],
+                    'melting_temperature': ['熔化', '熔炼', 'melt']
+                }
                 
-                # 使用第一行的日期作为列名中的时间戳
-                temp_data['timestamp'] = temp_data[date_col].fillna(method='ffill')
-                temp_data = temp_data.sort_values('timestamp')
+                # 初始化温度行索引映射
+                temp_rows = {}
+                for target_col, keywords in temp_keywords.items():
+                    for idx, value in enumerate(temp_data[measurement_col]):
+                        if isinstance(value, str) and any(keyword in value.lower() for keyword in keywords):
+                            temp_rows[target_col] = idx
+                            break
                 
-                return temp_data[['timestamp', 'vault_temperature', 'bottom_temperature', 
-                                'side_temperature', 'melting_temperature']]
+                if not temp_rows:
+                    print("Warning: Could not find temperature measurements")
+                    return empty_data
+                
+                # 创建新的DataFrame
+                processed_data = pd.DataFrame()
+                
+                # 日期在列名中，跳过第一列（测量点描述列）
+                timestamps = [col for col in temp_data.columns[1:] if isinstance(col, pd.Timestamp)]
+                if not timestamps:
+                    print("Warning: No valid timestamps found in columns")
+                    return empty_data
+                
+                # 转置数据：将时间从列名变为行
+                processed_data['timestamp'] = timestamps
+                
+                # 添加温度列，从对应的行中获取数据
+                for col_name, row_idx in temp_rows.items():
+                    # 获取该行的温度数据，跳过第一列（测量点描述列）
+                    temp_values = temp_data.iloc[row_idx, 1:]
+                    # 只取对应时间戳的数据
+                    temp_values = temp_values[timestamps]
+                    processed_data[col_name] = pd.to_numeric(temp_values, errors='coerce')
+                
+                # 删除timestamp为NaT的行
+                processed_data = processed_data.dropna(subset=['timestamp'])
+                processed_data = processed_data.sort_values('timestamp')
+                
+                # 确保所有必需的列都存在
+                for col in ['vault_temperature', 'bottom_temperature', 
+                           'side_temperature', 'melting_temperature']:
+                    if col not in processed_data.columns:
+                        processed_data[col] = None
+                
+                return processed_data[['timestamp', 'vault_temperature', 'bottom_temperature', 
+                                     'side_temperature', 'melting_temperature']]
         
         except Exception as e:
             print(f"Warning: Could not load temperature data: {str(e)}")
@@ -130,7 +233,17 @@ class DataLoader:
         
         try:
             # 尝试从不同的sheet名称加载数据
-            excel_file = self.data_path / "二车间2023年周报（含20周）(1).xlsx"
+            param_file_patterns = ["*二车间*2023年周报*.xlsx", "*2023年周报*.xlsx"]
+            excel_file = None
+            for pattern in param_file_patterns:
+                matches = list(self.data_path.glob(pattern))
+                if matches:
+                    excel_file = matches[0]
+                    break
+                    
+            if not excel_file:
+                print("Warning: Could not find parameter data file")
+                return empty_data
             xls = pd.ExcelFile(excel_file)
             
             # 尝试可能的sheet名称
@@ -196,20 +309,49 @@ class DataLoader:
         param_data = self.load_parameter_data()
         production_data = self.load_production_data()
 
-        # 将所有数据基于时间戳合并
-        merged_data = pd.merge_asof(
-            temp_data,
-            param_data,
-            on='timestamp',
-            direction='nearest'
-        )
-
+        # 确保时间戳列是datetime类型
+        if not temp_data.empty:
+            temp_data['timestamp'] = pd.to_datetime(temp_data['timestamp'])
+        if not param_data.empty:
+            param_data['timestamp'] = pd.to_datetime(param_data['timestamp'])
+        
+        # 创建基础数据框架
+        if temp_data.empty and param_data.empty:
+            # 如果两个数据集都是空的，返回一个带有基本列的空DataFrame
+            return pd.DataFrame(columns=[
+                'timestamp', 'vault_temperature', 'bottom_temperature',
+                'side_temperature', 'melting_temperature', 'heavy_oil_flow',
+                'natural_gas_flow', 'air_ratio', 'air_oil_ratio',
+                'oxygen_content', 'hour', 'day', 'month', 'year'
+            ])
+        
+        # 如果温度数据为空但参数数据存在
+        if temp_data.empty and not param_data.empty:
+            merged_data = param_data
+        # 如果参数数据为空但温度数据存在
+        elif param_data.empty and not temp_data.empty:
+            merged_data = temp_data
+        else:
+            # 两个数据集都有数据时进行合并
+            try:
+                merged_data = pd.merge_asof(
+                    temp_data.sort_values('timestamp'),
+                    param_data.sort_values('timestamp'),
+                    on='timestamp',
+                    direction='nearest'
+                )
+            except Exception as e:
+                print(f"Warning: Error merging data: {str(e)}")
+                # 如果合并失败，使用温度数据作为基础
+                merged_data = temp_data
+        
         # 添加时间特征
-        merged_data['hour'] = merged_data['timestamp'].dt.hour
-        merged_data['day'] = merged_data['timestamp'].dt.day
-        merged_data['month'] = merged_data['timestamp'].dt.month
-        merged_data['year'] = merged_data['timestamp'].dt.year
-
+        if not merged_data.empty and 'timestamp' in merged_data.columns:
+            merged_data['hour'] = merged_data['timestamp'].dt.hour
+            merged_data['day'] = merged_data['timestamp'].dt.day
+            merged_data['month'] = merged_data['timestamp'].dt.month
+            merged_data['year'] = merged_data['timestamp'].dt.year
+        
         return merged_data
 
     def _process_production_sheet(self, df):
