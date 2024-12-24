@@ -14,8 +14,15 @@ import copy
 class UserFEDL(User):
     def __init__(self, numeric_id, train_data, test_data, model_config, batch_size, learning_rate, hyper_learning_rate, L,
                  local_epochs, optimizer, hidden_dim=128):
+        # Initialize model configuration
+        self.model_config = model_config
+        if not hasattr(self.model_config, 'hidden_dim'):
+            self.model_config.hidden_dim = hidden_dim
+        if not hasattr(self.model_config, 'device'):
+            self.model_config.device = 'cpu'
+            
         # Initialize FedUAVGNN model
-        self.model = FedUAVGNN(n_feature=2, n_hidden=hidden_dim)  # 2 features for x,y coordinates
+        self.model = FedUAVGNN(self.model_config)
         super().__init__(numeric_id, train_data, test_data, self.model, batch_size, learning_rate, hyper_learning_rate, L,
                          local_epochs)
 
