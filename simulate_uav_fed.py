@@ -171,40 +171,71 @@ def parse_arguments():
     print("\nDebugging argument parsing...")
     print("Command line arguments:", sys.argv)
     
+    # Create parser without any arguments first
     parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation')
     
-    # Add all arguments directly to parser
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
-    parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
-    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'], help='Device to use')
-    parser.add_argument('--hidden_dim', type=int, default=64, help='Hidden dimension size')
-    parser.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
-    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
-    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs')
-    parser.add_argument('--path_model', type=str, default='./model/rgnn_10.pt', help='Path to save model')
-    parser.add_argument('--num_rounds', type=int, default=50, help='Number of federated learning rounds')
-    parser.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
-    parser.add_argument('--eval_interval', type=int, default=2, help='Evaluation interval in rounds')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
-    parser.add_argument('--hyper_learning_rate', type=float, default=0.01, help='Hyper learning rate for FEDL')
-    parser.add_argument('--L', type=float, default=0.1, help='L parameter for FEDL optimizer')
-    parser.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
-    parser.add_argument('--n_uavs_small', type=int, default=2, help='Number of UAVs for small network')
-    parser.add_argument('--n_users_medium', type=int, default=20, help='Number of users for medium network')
-    parser.add_argument('--n_uavs_medium', type=int, default=5, help='Number of UAVs for medium network')
-    parser.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
-    parser.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
-    parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save checkpoints')
-    parser.add_argument('--log_dir', type=str, default='./logs', help='Directory to save logs')
-    
-    # Parse arguments and print them for debugging
-    args, unknown = parser.parse_known_args()
-    print("\nParsed arguments:", vars(args))
-    if unknown:
-        print("Unknown arguments:", unknown)
-    
-    return args
+    try:
+        # First get all arguments without validation
+        args_dict = {}
+        i = 1  # Skip script name
+        while i < len(sys.argv):
+            if sys.argv[i].startswith('--'):
+                arg_name = sys.argv[i][2:]  # Remove '--'
+                if i + 1 < len(sys.argv) and not sys.argv[i + 1].startswith('--'):
+                    arg_value = sys.argv[i + 1]
+                    args_dict[arg_name] = arg_value
+                    i += 2
+                else:
+                    args_dict[arg_name] = True
+                    i += 1
+            else:
+                i += 1
+        
+        print("\nCollected arguments:", args_dict)
+        
+        # Now add arguments to parser with correct types based on collected values
+        parser.add_argument('--batch_size', type=int, default=32)
+        parser.add_argument('--train_num', type=int, default=4096)
+        parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'])
+        parser.add_argument('--hidden_dim', type=int, default=64)
+        parser.add_argument('--alpha', type=float, default=0.2)
+        parser.add_argument('--learning_rate', type=float, default=0.001)
+        parser.add_argument('--epochs', type=int, default=500)
+        parser.add_argument('--path_model', type=str, default='./model/rgnn_10.pt')
+        parser.add_argument('--num_rounds', type=int, default=50)
+        parser.add_argument('--local_epochs', type=int, default=5)
+        parser.add_argument('--eval_interval', type=int, default=2)
+        parser.add_argument('--seed', type=int, default=42)
+        parser.add_argument('--client_sample_ratio', type=float, default=1.0)
+        parser.add_argument('--hyper_learning_rate', type=float, default=0.01)
+        parser.add_argument('--L', type=float, default=0.1)
+        parser.add_argument('--n_users_small', type=int, default=10)
+        parser.add_argument('--n_uavs_small', type=int, default=2)
+        parser.add_argument('--n_users_medium', type=int, default=20)
+        parser.add_argument('--n_uavs_medium', type=int, default=5)
+        parser.add_argument('--n_users_large', type=int, default=50)
+        parser.add_argument('--n_uavs_large', type=int, default=10)
+        parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints')
+        parser.add_argument('--log_dir', type=str, default='./logs')
+        
+        # Convert string values to appropriate types
+        for key, value in args_dict.items():
+            if key in ['batch_size', 'train_num', 'hidden_dim', 'epochs', 'num_rounds', 
+                      'local_epochs', 'eval_interval', 'seed', 'n_users_small', 'n_uavs_small',
+                      'n_users_medium', 'n_uavs_medium', 'n_users_large', 'n_uavs_large']:
+                args_dict[key] = int(value)
+            elif key in ['alpha', 'learning_rate', 'client_sample_ratio', 'hyper_learning_rate', 'L']:
+                args_dict[key] = float(value)
+        
+        # Create namespace object with all arguments
+        args = argparse.Namespace(**{**vars(parser.parse_args([])), **args_dict})
+        print("\nFinal parsed arguments:", vars(args))
+        return args
+        
+    except Exception as e:
+        print(f"\nError parsing arguments: {str(e)}")
+        print("Using default values")
+        return parser.parse_args([])
 
 def main():
     """Main function for UAV Network Federated Learning Simulation."""
