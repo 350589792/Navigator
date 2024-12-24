@@ -13,22 +13,24 @@ interface AuthResponse {
 
 export const auth = {
   login: async (data: LoginData): Promise<AuthResponse> => {
-    const formData = new FormData();
+    const formData = new URLSearchParams();
     formData.append('username', data.email);
     formData.append('password', data.password);
+    formData.append('grant_type', 'password');
 
     const tokenResponse = await api.post<TokenResponse>(
       '/auth/login',
-      formData,
+      formData.toString(),
       {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'application/x-www-form-urlencoded'
         }
       }
     );
 
     // Set the token for subsequent requests
     const token = tokenResponse.data.access_token;
+    localStorage.setItem('token', token);
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
     // Fetch user data
@@ -57,6 +59,31 @@ export const auth = {
     const response = await api.get<User>('/users/me');
     return response.data;
   },
+
+  refreshToken: async (): Promise<TokenResponse | null> => {
+    try {
+      const response = await api.post<TokenResponse>(
+        '/auth/refresh-token',
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data && response.data.access_token) {
+        localStorage.setItem('token', response.data.access_token);
+        api.defaults.headers.common['Authorization'] = `Bearer ${response.data.access_token}`;
+        return response.data;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      localStorage.removeItem('token');
+      throw error;
+    }
+  },
 };
 
-export type { AuthResponse };
+export type { AuthResponse, TokenResponse };

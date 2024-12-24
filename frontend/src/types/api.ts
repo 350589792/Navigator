@@ -38,11 +38,13 @@ export interface DomainPreference {
 
 export interface Report {
   id: string;
-  date: string;
-  domains: string[];
-  content: string;
-  summary: string;
-  createdAt: string;
+  date?: string;
+  domains?: string[];
+  content?: string;
+  summary?: string;
+  createdAt?: string;
+  status?: 'processing' | 'completed' | 'error';
+  error?: string;
 }
 
 export interface AdminConfig {

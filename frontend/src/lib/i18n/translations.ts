@@ -104,10 +104,34 @@ export const translations = {
       },
       reports: {
         title: '报告查看器',
-        noReports: '暂无报告',
+        subtitle: '查看和生成行业报告',
+        filterPlaceholder: '按领域或日期筛选',
+        refresh: '刷新',
         generateReport: '生成报告',
-        download: '下载',
-        share: '分享'
+        noReports: '未找到报告',
+        noMatchingReports: '未找到匹配的报告',
+        noDate: '无日期',
+        noDomains: '无领域',
+        noSummary: '暂无摘要',
+        detailsTitle: '报告详情',
+        domains: '领域',
+        content: '内容',
+        fetchError: '获取报告失败',
+        generateError: '生成报告失败',
+        processing: '报告生成中...',
+        completed: '报告生成完成',
+        error: '报告生成失败',
+        options: {
+          title: '报告生成选项',
+          format: '报告格式',
+          formatText: '文本',
+          formatHtml: 'HTML',
+          preferences: '内容偏好',
+          keywords: '包含关键词',
+          trends: '包含趋势分析',
+          keyPoints: '包含要点',
+          generate: '生成报告'
+        }
       },
       email: {
         title: '邮件设置',
@@ -176,6 +200,7 @@ export const translations = {
       loading: '加载中...',
       error: '出错了',
       success: '成功',
+      cancel: '取消'
     }
   },
   en: {
@@ -283,10 +308,31 @@ export const translations = {
       },
       reports: {
         title: 'Report Viewer',
+        subtitle: 'View and generate industry reports',
+        filterPlaceholder: 'Filter by domain or date',
+        refresh: 'Refresh',
+        noDomains: 'No domains',
+        noDate: 'No date',
+        noSummary: 'No summary available',
         noReports: 'No reports available',
+        noMatchingReports: 'No matching reports',
         generateReport: 'Generate Report',
         download: 'Download',
-        share: 'Share'
+        share: 'Share',
+        fetchError: 'Failed to fetch reports',
+        generateError: 'Failed to generate report',
+        processing: 'Report is being processed...',
+        options: {
+          title: 'Report Generation Options',
+          format: 'Report Format',
+          formatText: 'Text',
+          formatHtml: 'HTML',
+          preferences: 'Content Preferences',
+          keywords: 'Include Keywords',
+          trends: 'Include Trend Analysis',
+          keyPoints: 'Include Key Points',
+          generate: 'Generate Report'
+        }
       },
       email: {
         title: 'Email Preferences',
