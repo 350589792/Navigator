@@ -153,34 +153,40 @@ def parse_arguments():
     """Parse command line arguments using consolidated configuration."""
     parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation')
     
+    # Create argument groups
+    model_group = parser.add_argument_group('Model Parameters')
+    train_group = parser.add_argument_group('Training Parameters')
+    network_group = parser.add_argument_group('Network Configuration')
+    path_group = parser.add_argument_group('Paths and Directories')
+    
     # Model parameters
-    parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
-    parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
-    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'], help='Device to use (cpu/cuda)')
-    parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension size')
-    parser.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
-    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
-    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs')
-    parser.add_argument('--path_model', type=str, default='./model/rgnn_10.pt', help='Path to save model')
+    model_group.add_argument('--batch_size', type=int, default=512, help='Batch size')
+    model_group.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
+    model_group.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'], help='Device to use (cpu/cuda)')
+    model_group.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension size')
+    model_group.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
+    model_group.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
+    model_group.add_argument('--epochs', type=int, default=500, help='Number of epochs')
+    model_group.add_argument('--path_model', type=str, default='./model/rgnn_10.pt', help='Path to save model')
     
     # Training parameters
-    parser.add_argument('--num_rounds', type=int, default=100, help='Number of federated learning rounds')
-    parser.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
-    parser.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
+    train_group.add_argument('--num_rounds', type=int, default=100, help='Number of federated learning rounds')
+    train_group.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
+    train_group.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
+    train_group.add_argument('--seed', type=int, default=42, help='Random seed')
+    train_group.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
     
     # Network configuration
-    parser.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
-    parser.add_argument('--n_uavs_small', type=int, default=2, help='Number of UAVs for small network')
-    parser.add_argument('--n_users_medium', type=int, default=20, help='Number of users for medium network')
-    parser.add_argument('--n_uavs_medium', type=int, default=5, help='Number of UAVs for medium network')
-    parser.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
-    parser.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
+    network_group.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
+    network_group.add_argument('--n_uavs_small', type=int, default=2, help='Number of UAVs for small network')
+    network_group.add_argument('--n_users_medium', type=int, default=20, help='Number of users for medium network')
+    network_group.add_argument('--n_uavs_medium', type=int, default=5, help='Number of UAVs for medium network')
+    network_group.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
+    network_group.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
     
     # Paths and directories
-    parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save model checkpoints')
-    parser.add_argument('--log_dir', type=str, default='./logs', help='Directory to save training logs')
+    path_group.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save model checkpoints')
+    path_group.add_argument('--log_dir', type=str, default='./logs', help='Directory to save training logs')
     
     args = parser.parse_args()
     return args
