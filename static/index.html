@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交通事故案例分析系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .similar-case {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .law {
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #f9f9f9;
+        }
+        .score {
+            color: #666;
+            font-size: 0.9em;
+        }
+        #loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>交通事故案例分析系统</h1>
+        <div>
+            <textarea id="caseInput" rows="8" placeholder="请输入交通事故案例描述..."></textarea>
+            <button id="analyzeBtn" onclick="analyzeCaseData()">开始分析</button>
+        </div>
+        <div id="loading">分析中，请稍候...</div>
+        <div class="results">
+            <div id="similarCases"></div>
+            <div id="relevantLaws"></div>
+        </div>
+    </div>
+
+    <script>
+        async function analyzeCaseData() {
+            const caseInput = document.getElementById('caseInput');
+            const loading = document.getElementById('loading');
+            const similarCases = document.getElementById('similarCases');
+            const relevantLaws = document.getElementById('relevantLaws');
+            const analyzeBtn = document.getElementById('analyzeBtn');
+
+            // 验证输入
+            if (!caseInput.value.trim()) {
+                alert('请输入案例内容');
+                return;
+            }
+
+            // 显示加载状态
+            loading.style.display = 'block';
+            analyzeBtn.disabled = true;
+            similarCases.innerHTML = '';
+            relevantLaws.innerHTML = '';
+
+            try {
+                const response = await fetch('/analyze_case', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        content: caseInput.value
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('分析请求失败');
+                }
+
+                const data = await response.json();
+                
+                // 显示相似案例
+                if (data.similar_cases && data.similar_cases.length > 0) {
+                    similarCases.innerHTML = '<h2>相似案例</h2>';
+                    data.similar_cases.forEach(case_data => {
+                        const similarityPercentage = (case_data.similarity_score * 100).toFixed(1);
+                        const caseElement = document.createElement('div');
+                        caseElement.className = 'similar-case';
+                        caseElement.innerHTML = `
+                            <div>${case_data.content}</div>
+                            <div class="score">相似度: ${similarityPercentage}%</div>
+                        `;
+                        similarCases.appendChild(caseElement);
+                    });
+                }
+
+                // 显示相关法条
+                if (data.relevant_laws && data.relevant_laws.length > 0) {
+                    relevantLaws.innerHTML = '<h2>相关法条</h2>';
+                    data.relevant_laws.forEach(law => {
+                        const lawElement = document.createElement('div');
+                        lawElement.className = 'law';
+                        lawElement.textContent = law;
+                        relevantLaws.appendChild(lawElement);
+                    });
+                }
+            } catch (error) {
+                alert('分析过程出错: ' + error.message);
+            } finally {
+                loading.style.display = 'none';
+                analyzeBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
