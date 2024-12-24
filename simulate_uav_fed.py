@@ -60,8 +60,9 @@ def run_simulation(n_users, n_uavs, args):
             self.epochs = args.epochs
             
             # Network configuration
-            self.num_users = n_users
-            self.num_uavs = n_uavs
+            self.n_users = n_users  # Total number of users in network
+            self.n_uavs = n_uavs    # Total number of UAVs in network
+            # Network size configurations
             self.n_users_small = args.n_users_small
             self.n_uavs_small = args.n_uavs_small
             self.n_users_medium = args.n_users_medium
@@ -93,19 +94,10 @@ def run_simulation(n_users, n_uavs, args):
         num_glob_iters=model_config.num_rounds,
         local_epochs=model_config.local_epochs,
         optimizer="fedl",
-        num_users=model_config.num_users,
-        num_uavs=model_config.num_uavs,
+        num_users=model_config.n_users,  # Use n_users instead of num_users
         rho=1.0,
         times=1,
-        hidden_dim=model_config.hidden_dim,
-        train_num=model_config.train_num,
-        alpha=model_config.alpha,
-        device=model_config.device,
-        checkpoint_dir=model_config.checkpoint_dir,
-        log_dir=model_config.log_dir,
-        client_sample_ratio=model_config.client_sample_ratio,
-        seed=model_config.seed,
-        eval_interval=model_config.eval_interval
+        hidden_dim=model_config.hidden_dim
     )
     
     # Train the model using server's built-in training method
@@ -184,14 +176,15 @@ def parse_arguments():
     parser.add_argument('--num_rounds', type=int, default=100, help='Number of federated learning rounds')
     parser.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
     parser.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
+    parser.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
     
     # Training Parameters
     parser.add_argument('--device', default='cpu', help='Device to use (cpu/cuda)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
     parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
     parser.add_argument('--epochs', type=int, default=500, help='Number of epochs')
     parser.add_argument('--path_model', default='./model/rgnn_10.pt', help='Path to save model')
+    
     
     # Model Checkpointing
     parser.add_argument('--checkpoint_dir', default='./checkpoints', help='Directory to save model checkpoints')

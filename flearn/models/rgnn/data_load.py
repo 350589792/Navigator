@@ -10,26 +10,22 @@ import random
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
-from gnn_fed_config_new import get_default_args
-
-# Get default configuration
-parser = get_default_args()
-args = parser.parse_args()
 from sklearn.cluster import KMeans
 
 
-def data_create(N, M):
+def data_create(N, M, device='cpu'):
     '''
     input:
-         N:用户对数
-         M:无人机个数
+         N: Number of user pairs
+         M: Number of UAVs
+         device: Device to place tensors on (default: 'cpu')
     
     Output：
-         features：用户和无人机的位置，前2N个为用户坐标，后M个为无人机坐标
-         edge_index:边的索引
+         features: User and UAV positions (first 2N are user coords, last M are UAV coords)
+         edge_index: Edge indices
     
-    用户位置随机生成
-    无人机位置为2N个用户的KMeans聚类
+    User positions are randomly generated
+    UAV positions are determined by KMeans clustering of 2N user positions
     '''
     # torch.manual_seed(50)
     # random.seed(50)
@@ -63,16 +59,15 @@ def data_create(N, M):
     # index_dst = torch.arange(0, len(users)+len(uav)).repeat(len(uav))
     index_dst = torch.arange(0, len(users)).repeat(len(uav))
 
-    # 使用torch.row_stack()函数将user_src、user_dst和uav三个张量垂直堆叠，创建了features张量。args.device = torch.device('cpu')是新增的代码
-    args.device = torch.device('cpu')
-    features = torch.row_stack([user_src, user_dst, uav]).to(args.device)
-    edge_index = torch.row_stack([index_src, index_dst]).to(args.device)
+    # Stack user and UAV tensors vertically and move to specified device
+    features = torch.row_stack([user_src, user_dst, uav]).to(device)
+    edge_index = torch.row_stack([index_src, index_dst]).to(device)
 
 
     return features, edge_index
 
 
-def create_federated_data(N, M):
+def create_federated_data(N, M, device='cpu'):
     """
     Creates and partitions data for federated learning with UAVs.
     
@@ -85,7 +80,7 @@ def create_federated_data(N, M):
               Each UAV gets all user positions but only its own UAV position
     """
     # Get full network data
-    features, edge_index = data_create(N, M)
+    features, edge_index = data_create(N, M, device)
     
     # Split data for each UAV
     uav_data = []
