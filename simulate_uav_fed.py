@@ -31,7 +31,12 @@ except ImportError as e:
 def run_simulation(n_users, n_uavs, args):
     """Run federated learning simulation with specified number of UAVs."""
     print(f"\nStarting simulation with {n_uavs} UAVs and {n_users} users")
-    print(f"Configuration: batch_size={args.batch_size}, learning_rate={args.learning_rate}, epochs={args.epochs}")
+    print(f"Configuration:")
+    print(f"- Network: {n_users} users, {n_uavs} UAVs")
+    print(f"- Training: batch_size={args.batch_size}, learning_rate={args.learning_rate}")
+    print(f"- Rounds: {args.num_rounds} global rounds, {args.local_epochs} local epochs")
+    print(f"- Model: hidden_dim={args.hidden_dim}, alpha={args.alpha}")
+    print(f"- Device: {args.device}")
     
     # Record start time and initial resource usage
     start_time = time.time()
@@ -49,15 +54,27 @@ def run_simulation(n_users, n_uavs, args):
             self.train_num = args.train_num
             self.num_rounds = args.num_rounds
             self.local_epochs = args.local_epochs
+            self.epochs = args.epochs
             
             # Network configuration
             self.num_users = n_users
             self.num_uavs = n_uavs
+            self.n_users_small = args.n_users_small
+            self.n_uavs_small = args.n_uavs_small
+            self.n_users_medium = args.n_users_medium
+            self.n_uavs_medium = args.n_uavs_medium
+            self.n_users_large = args.n_users_large
+            self.n_uavs_large = args.n_uavs_large
             
-            # Paths
+            # Paths and directories
             self.checkpoint_dir = args.checkpoint_dir
             self.log_dir = args.log_dir
             self.path_model = args.path_model
+            
+            # Additional parameters
+            self.seed = getattr(args, 'seed', 42)
+            self.eval_interval = getattr(args, 'eval_interval', 5)
+            self.client_sample_ratio = getattr(args, 'client_sample_ratio', 1.0)
     
     model_config = ModelConfig(args, n_users, n_uavs)
     
@@ -132,8 +149,9 @@ def plot_results(results, save_dir):
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation')
+    parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation', allow_abbrev=False)
     
+    # Training parameters
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
@@ -142,11 +160,13 @@ def parse_arguments():
     parser.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
-    parser.add_argument('--num_rounds', type=int, default=20, help='Number of federated learning rounds')
-    parser.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
     parser.add_argument('--path_model', type=str, default='./model/rgnn_fed.pt', help='Path to save model')
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save checkpoints')
     parser.add_argument('--log_dir', type=str, default='./logs', help='Directory to save logs')
+    
+    # Federated learning parameters
+    parser.add_argument('--num_rounds', type=int, default=20, help='Number of federated learning rounds')
+    parser.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
     
     # Network configuration
     parser.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
@@ -156,11 +176,15 @@ def parse_arguments():
     parser.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
     parser.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
     
-    # Parse known args only
-    args, unknown = parser.parse_known_args()
-    if unknown:
-        logger.warning(f"Unknown arguments: {unknown}")
+    # Network configuration
+    parser.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
+    parser.add_argument('--n_uavs_small', type=int, default=2, help='Number of UAVs for small network')
+    parser.add_argument('--n_users_medium', type=int, default=20, help='Number of users for medium network')
+    parser.add_argument('--n_uavs_medium', type=int, default=5, help='Number of UAVs for medium network')
+    parser.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
+    parser.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
     
+    args = parser.parse_args()
     return args
 
 def main():
