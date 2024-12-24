@@ -1,0 +1,44 @@
+# config.yaml
+
+data:
+  path: "data/"
+  sequence_length: 24
+  target_column: "vault_temperature"
+  feature_columns:
+    - "bottom_temperature"
+    - "heavy_oil_flow"
+    - "natural_gas_flow"
+    - "air_ratio"
+    - "air_oil_ratio"
+
+model:
+  ai:
+    input_size: 5
+    hidden_size: 128
+    num_layers: 3
+    dropout: 0.2
+
+  cfd:
+    nx: 100
+    ny: 100
+    dx: 0.1
+    dy: 0.1
+    dt: 0.001
+
+  hybrid:
+    ai_weight: 0.6
+    cfd_weight: 0.4
+    temp_threshold: 2.0
+
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  validation_split: 0.2
+  early_stopping_patience: 10
+
+paths:
+  model_save_path: "models/checkpoints/"
+  log_path: "logs/"
+  output_path: "output/"
