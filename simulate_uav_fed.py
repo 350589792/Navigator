@@ -121,51 +121,6 @@ def run_simulation(n_users, n_uavs, args):
     start_time = time.time()
     initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
     
-    # Get federated data
-    uav_data = create_federated_data(n_users, n_uavs)
-    
-    # Split data into train/test sets for each UAV (80/20 split)
-    train_data = []
-    test_data = []
-    for uav_features, uav_edges in uav_data:
-        n_samples = uav_edges.shape[1]
-        n_train = int(0.8 * n_samples)
-        
-        # Randomly shuffle indices
-        indices = torch.randperm(n_samples)
-        train_idx = indices[:n_train]
-        test_idx = indices[n_train:]
-        
-        # Split features and edges
-        train_data.append((
-            uav_features,
-            uav_edges[:, train_idx]
-        ))
-        test_data.append((
-            uav_features,
-            uav_edges[:, test_idx]
-        ))
-    
-    # Initialize server with configuration
-    server = FEDL(
-        dataset="uav_network",
-        algorithm="fedl",
-        model_config=model_config,
-        batch_size=model_config.batch_size,
-        learning_rate=model_config.learning_rate,
-        hyper_learning_rate=model_config.hyper_learning_rate,
-        L=model_config.L,
-        num_glob_iters=model_config.num_rounds,
-        local_epochs=model_config.local_epochs,
-        optimizer="fedl",
-        num_users=model_config.n_users,
-        rho=1.0,
-        times=1,
-        hidden_dim=model_config.hidden_dim,
-        train_data=train_data,
-        test_data=test_data
-    )
-    
     # Train the model using server's built-in training method
     server.train()
     
@@ -222,19 +177,19 @@ def parse_arguments():
     path_group = parser.add_argument_group('Paths and Directories')
     
     # Model parameters
-    model_group.add_argument('--batch_size', type=int, default=512, help='Batch size')
+    model_group.add_argument('--batch_size', type=int, default=32, help='Batch size')
     model_group.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
     model_group.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'], help='Device to use (cpu/cuda)')
-    model_group.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension size')
+    model_group.add_argument('--hidden_dim', type=int, default=64, help='Hidden dimension size')
     model_group.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
-    model_group.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
+    model_group.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     model_group.add_argument('--epochs', type=int, default=500, help='Number of epochs')
     model_group.add_argument('--path_model', type=str, default='./model/rgnn_10.pt', help='Path to save model')
     
     # Training parameters
-    train_group.add_argument('--num_rounds', type=int, default=100, help='Number of federated learning rounds')
+    train_group.add_argument('--num_rounds', type=int, default=50, help='Number of federated learning rounds')
     train_group.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
-    train_group.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
+    train_group.add_argument('--eval_interval', type=int, default=2, help='Evaluation interval in rounds')
     train_group.add_argument('--seed', type=int, default=42, help='Random seed')
     train_group.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
     train_group.add_argument('--hyper_learning_rate', type=float, default=0.01, help='Hyper learning rate for FEDL')
