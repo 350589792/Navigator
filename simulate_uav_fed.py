@@ -149,6 +149,14 @@ def plot_results(results, save_dir):
 
 def parse_arguments():
     """Parse command line arguments using consolidated configuration."""
+    import os
+    import sys
+    
+    # Add current directory to Python path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    if current_dir not in sys.path:
+        sys.path.append(current_dir)
+    
     from gnn_fed_config_new import get_default_args
     
     # Get parser with all arguments pre-configured
