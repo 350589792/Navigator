@@ -72,8 +72,32 @@ def run_simulation(n_users, n_uavs, args):
     
     model_config = ModelConfig(args, n_users, n_uavs)
     
-    # Initialize server and clients
-    train_data, test_data = create_federated_data(n_users, n_uavs)
+    # Get federated data and initialize server
+    uav_data = create_federated_data(n_users, n_uavs)
+    
+    # Split data into train/test sets for each UAV (80/20 split)
+    train_data = []
+    test_data = []
+    for uav_features, uav_edges in uav_data:
+        n_samples = uav_edges.shape[1]
+        n_train = int(0.8 * n_samples)
+        
+        # Randomly shuffle indices
+        indices = torch.randperm(n_samples)
+        train_idx = indices[:n_train]
+        test_idx = indices[n_train:]
+        
+        # Split features and edges
+        train_data.append((
+            uav_features,
+            uav_edges[:, train_idx]
+        ))
+        test_data.append((
+            uav_features,
+            uav_edges[:, test_idx]
+        ))
+    
+    # Initialize server with configuration
     server = FEDL(
         dataset="uav_network",
         algorithm="fedl",
@@ -88,49 +112,39 @@ def run_simulation(n_users, n_uavs, args):
         num_users=model_config.n_users,
         rho=1.0,
         times=1,
-        hidden_dim=model_config.hidden_dim
+        hidden_dim=model_config.hidden_dim,
+        train_data=train_data,
+        test_data=test_data
     )
     
     # Record start time and initial resource usage
     start_time = time.time()
     initial_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
     
-    # Create model configuration
-    class ModelConfig:
-        def __init__(self, args, n_users, n_uavs):
-            # Training parameters
-            self.batch_size = args.batch_size
-            self.learning_rate = args.learning_rate
-            self.device = args.device
-            self.hidden_dim = args.hidden_dim
-            self.alpha = args.alpha
-            self.train_num = args.train_num
-            self.num_rounds = args.num_rounds
-            self.local_epochs = args.local_epochs
-            self.epochs = args.epochs
-            
-            # Network configuration
-            self.n_users = n_users  # Total number of users in network
-            self.n_uavs = n_uavs    # Total number of UAVs in network
-            # Network size configurations
-            self.n_users_small = args.n_users_small
-            self.n_uavs_small = args.n_uavs_small
-            self.n_users_medium = args.n_users_medium
-            self.n_uavs_medium = args.n_uavs_medium
-            self.n_users_large = args.n_users_large
-            self.n_uavs_large = args.n_uavs_large
-            
-            # Paths and directories
-            self.checkpoint_dir = args.checkpoint_dir
-            self.log_dir = args.log_dir
-            self.path_model = args.path_model
-            
-            # Additional parameters
-            self.seed = getattr(args, 'seed', 42)
-            self.eval_interval = getattr(args, 'eval_interval', 5)
-            self.client_sample_ratio = getattr(args, 'client_sample_ratio', 1.0)
+    # Get federated data
+    uav_data = create_federated_data(n_users, n_uavs)
     
-    model_config = ModelConfig(args, n_users, n_uavs)
+    # Split data into train/test sets for each UAV (80/20 split)
+    train_data = []
+    test_data = []
+    for uav_features, uav_edges in uav_data:
+        n_samples = uav_edges.shape[1]
+        n_train = int(0.8 * n_samples)
+        
+        # Randomly shuffle indices
+        indices = torch.randperm(n_samples)
+        train_idx = indices[:n_train]
+        test_idx = indices[n_train:]
+        
+        # Split features and edges
+        train_data.append((
+            uav_features,
+            uav_edges[:, train_idx]
+        ))
+        test_data.append((
+            uav_features,
+            uav_edges[:, test_idx]
+        ))
     
     # Initialize server with configuration
     server = FEDL(
@@ -139,15 +153,17 @@ def run_simulation(n_users, n_uavs, args):
         model_config=model_config,
         batch_size=model_config.batch_size,
         learning_rate=model_config.learning_rate,
-        hyper_learning_rate=0.01,
-        L=0.1,
+        hyper_learning_rate=model_config.hyper_learning_rate,
+        L=model_config.L,
         num_glob_iters=model_config.num_rounds,
         local_epochs=model_config.local_epochs,
         optimizer="fedl",
-        num_users=model_config.n_users,  # Use n_users instead of num_users
+        num_users=model_config.n_users,
         rho=1.0,
         times=1,
-        hidden_dim=model_config.hidden_dim
+        hidden_dim=model_config.hidden_dim,
+        train_data=train_data,
+        test_data=test_data
     )
     
     # Train the model using server's built-in training method
