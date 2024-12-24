@@ -187,9 +187,7 @@ def parse_arguments():
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save model checkpoints')
     parser.add_argument('--log_dir', type=str, default='./logs', help='Directory to save training logs')
     
-    # Parse arguments
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 def main():
     """Main function for UAV Network Federated Learning Simulation."""
