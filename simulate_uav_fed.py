@@ -7,7 +7,6 @@ import numpy as np
 from collections import defaultdict
 import json
 import matplotlib.pyplot as plt
-import argparse
 import torch.nn.functional as F
 import psutil
 import logging
@@ -15,6 +14,18 @@ from datetime import datetime
 from pathlib import Path
 import random
 import warnings
+
+# Add project root to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Suppress warnings
+warnings.filterwarnings('ignore')
+
+# Configure logging at import time
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -168,74 +179,14 @@ def plot_results(results, save_dir):
 
 def parse_arguments():
     """Parse command line arguments."""
-    print("\nDebugging argument parsing...")
-    print("Command line arguments:", sys.argv)
-    
-    # Create parser without any arguments first
-    parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation')
-    
     try:
-        # First get all arguments without validation
-        args_dict = {}
-        i = 1  # Skip script name
-        while i < len(sys.argv):
-            if sys.argv[i].startswith('--'):
-                arg_name = sys.argv[i][2:]  # Remove '--'
-                if i + 1 < len(sys.argv) and not sys.argv[i + 1].startswith('--'):
-                    arg_value = sys.argv[i + 1]
-                    args_dict[arg_name] = arg_value
-                    i += 2
-                else:
-                    args_dict[arg_name] = True
-                    i += 1
-            else:
-                i += 1
-        
-        print("\nCollected arguments:", args_dict)
-        
-        # Now add arguments to parser with correct types based on collected values
-        parser.add_argument('--batch_size', type=int, default=32)
-        parser.add_argument('--train_num', type=int, default=4096)
-        parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'])
-        parser.add_argument('--hidden_dim', type=int, default=64)
-        parser.add_argument('--alpha', type=float, default=0.2)
-        parser.add_argument('--learning_rate', type=float, default=0.001)
-        parser.add_argument('--epochs', type=int, default=500)
-        parser.add_argument('--path_model', type=str, default='./model/rgnn_10.pt')
-        parser.add_argument('--num_rounds', type=int, default=50)
-        parser.add_argument('--local_epochs', type=int, default=5)
-        parser.add_argument('--eval_interval', type=int, default=2)
-        parser.add_argument('--seed', type=int, default=42)
-        parser.add_argument('--client_sample_ratio', type=float, default=1.0)
-        parser.add_argument('--hyper_learning_rate', type=float, default=0.01)
-        parser.add_argument('--L', type=float, default=0.1)
-        parser.add_argument('--n_users_small', type=int, default=10)
-        parser.add_argument('--n_uavs_small', type=int, default=2)
-        parser.add_argument('--n_users_medium', type=int, default=20)
-        parser.add_argument('--n_uavs_medium', type=int, default=5)
-        parser.add_argument('--n_users_large', type=int, default=50)
-        parser.add_argument('--n_uavs_large', type=int, default=10)
-        parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints')
-        parser.add_argument('--log_dir', type=str, default='./logs')
-        
-        # Convert string values to appropriate types
-        for key, value in args_dict.items():
-            if key in ['batch_size', 'train_num', 'hidden_dim', 'epochs', 'num_rounds', 
-                      'local_epochs', 'eval_interval', 'seed', 'n_users_small', 'n_uavs_small',
-                      'n_users_medium', 'n_uavs_medium', 'n_users_large', 'n_uavs_large']:
-                args_dict[key] = int(value)
-            elif key in ['alpha', 'learning_rate', 'client_sample_ratio', 'hyper_learning_rate', 'L']:
-                args_dict[key] = float(value)
-        
-        # Create namespace object with all arguments
-        args = argparse.Namespace(**{**vars(parser.parse_args([])), **args_dict})
-        print("\nFinal parsed arguments:", vars(args))
+        from gnn_fed_config_new import get_args
+        args = get_args()
+        print("\nParsed arguments:", vars(args))
         return args
-        
-    except Exception as e:
-        print(f"\nError parsing arguments: {str(e)}")
-        print("Using default values")
-        return parser.parse_args([])
+    except ImportError as e:
+        print(f"Error importing configuration: {e}")
+        raise
 
 def main():
     """Main function for UAV Network Federated Learning Simulation."""
