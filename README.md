@@ -1,72 +1,88 @@
-# AnalogNAS
+# 交通事故案例分析系统 - 本地部署指南
 
-Neural Architecture Search framework optimized for IMC (In-Memory Computing) inference accelerators.
+## 系统要求
+- Windows 操作系统
+- Python 3.8 或更高版本
 
-## Cross-Platform Compatibility
+## 安装步骤
 
-This code is designed to run on both Ubuntu and Windows systems. All dependencies used are cross-platform compatible:
-- Python 3.8+
-- NumPy
-- PyTorch
-- NetworkX
-- PyYAML
+### 1. 安装 Python
+1. 访问 Python 官网 (https://www.python.org/downloads/)
+2. 下载并安装最新版本的 Python
+3. 安装时勾选 "Add Python to PATH" 选项
+4. 验证安装：
+   - 打开命令提示符 (按 Win+R，输入 cmd，按回车)
+   - 输入命令：`python --version`
+   - 应显示 Python 版本号
 
-## Installation
+### 2. 下载并解压项目文件
+1. 将收到的项目压缩包解压到本地文件夹
+2. 记住解压后的文件夹路径
 
-```bash
-# Create and activate virtual environment (Ubuntu/Linux)
-python -m venv venv
-source venv/bin/activate
+### 3. 安装项目依赖
+1. 打开命令提示符 (Win+R -> cmd)
+2. 进入项目文件夹：
+   ```
+   cd 项目解压路径
+   ```
+3. 安装依赖包：
+   ```
+   pip install -r requirements.txt
+   ```
 
-# Create and activate virtual environment (Windows)
-python -m venv venv
-.\venv\Scripts\activate
+### 4. 检查端口占用
+1. 在命令提示符中输入：
+   ```
+   netstat -ano | findstr LISTENING | findstr "5000"
+   ```
+2. 如果显示端口 5000 被占用，可以在 app.py 中修改端口号（比如改为 5001）
 
-# Install dependencies
-pip install -r requirements.txt
-pip install -e .
-```
+### 5. 启动应用
+1. 在命令提示符中确保当前目录是项目文件夹
+2. 输入命令启动应用：
+   ```
+   python app.py
+   ```
+3. 等待看到以下提示：
+   ```
+   * Running on http://0.0.0.0:5000
+   * Debug mode: on
+   ```
 
-## Usage
+### 6. 访问应用
+1. 打开浏览器
+2. 访问地址：`http://127.0.0.1:5000`
+3. 如果修改了端口号，使用对应的端口访问
 
-Run the example search:
-```bash
-python example_run.py
-```
+## 常见问题解决
 
-The framework is designed for minimal hardware resource usage:
-- Efficient architecture representation using NetworkX
-- Fast performance estimation using proxy model
-- Configurable population size and generations
-- No training required during search
+### 端口被占用
+如果看到 "地址已被使用" 错误：
+1. 按 Ctrl+C 停止应用
+2. 修改 app.py 中的端口号
+3. 重新启动应用
 
-## Components
+### 依赖安装失败
+如果安装依赖时出错：
+1. 确保网络连接正常
+2. 尝试使用国内镜像：
+   ```
+   pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+   ```
 
-1. Search Space
-   - ResNet-like architecture space
-   - Configurable depth and width
-   - Flexible connection patterns
+### 浏览器无法访问
+如果浏览器显示无法访问：
+1. 确认应用是否正在运行
+2. 检查防火墙设置
+3. 尝试使用不同的浏览器
 
-2. Proxy Model
-   - Hardware-aware performance estimation
-   - Fast architecture evaluation
-   - Hardware resource monitoring
+## 使用说明
+1. 在文本框中输入交通事故案例描述
+2. 点击"开始分析"按钮
+3. 等待分析结果显示
+4. 查看相似案例和相关法条推荐
 
-3. Evolution Search
-   - Population-based optimization
-   - Score-weighted selection
-   - Hardware-aware constraints
-
-## Configuration
-
-Modify `config.py` parameters to adjust:
-- Search space constraints
-- Evolution parameters
-- Hardware constraints (resource limits)
-
-## Testing
-
-Run the test suite:
-```bash
-python -m unittest tests/test_basic.py -v
-```
+## 注意事项
+- 应用运行期间请勿关闭命令提示符窗口
+- 首次启动可能需要等待几秒钟
+- 建议使用 Chrome 或 Edge 浏览器访问

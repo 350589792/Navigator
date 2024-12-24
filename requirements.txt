@@ -1,4 +1,9 @@
-numpy>=1.21.0  # Basic numerical computations, cross-platform
-torch>=1.9.0   # PyTorch for basic tensor operations, cross-platform
-networkx>=2.6.0  # For graph operations in architecture representation
-pyyaml>=5.4.1   # For configuration management
+flask==3.0.0
+scikit-learn==1.3.2
+jieba==0.42.1
+numpy==1.26.2
+pydantic==2.5.2
+Werkzeug==3.0.1
+click==8.1.7
+colorama==0.4.6
+python-dotenv==1.0.0
