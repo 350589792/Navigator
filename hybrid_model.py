@@ -72,11 +72,21 @@ class HybridModel(nn.Module):
         """
         进行混合预测
         Args:
-            input_data: 输入数据
+            input_data: 输入数据，形状为 (batch_size, sequence_length, features) 或 (batch_size, features)
             return_details: 是否返回详细信息
         Returns:
             预测结果和可选的详细信息
         """
+        # 确保输入数据维度正确
+        if isinstance(input_data, torch.Tensor):
+            input_data = input_data.detach().cpu().numpy()
+            
+        # 如果输入是2D，添加序列维度
+        if len(input_data.shape) == 2:
+            input_data = input_data.reshape(input_data.shape[0], 1, -1)
+        # 如果输入是1D，添加批次和序列维度
+        elif len(input_data.shape) == 1:
+            input_data = input_data.reshape(1, 1, -1)
         try:
             # 1. AI模型预测
             ai_pred, ai_attention = self.predictor.predict(input_data)
@@ -86,12 +96,40 @@ class HybridModel(nn.Module):
             cfd_boundary = self.prepare_cfd_boundary(ai_pred)
 
             # 3. CFD模拟
-            cfd_results = self.cfd_model.run_simulation(cfd_boundary)
-            self.logger.info("CFD模拟完成")
+            try:
+                cfd_results = self.cfd_model.run_simulation(cfd_boundary)
+                self.logger.info("CFD模拟完成")
+                
+                # 检查CFD结果是否有效
+                if not isinstance(cfd_results, dict) or 'temperature_field' not in cfd_results:
+                    self.logger.warning("CFD结果格式无效，使用AI预测结果")
+                    return ai_pred if not return_details else (ai_pred, {
+                        'ai_prediction': ai_pred,
+                        'ai_attention': ai_attention,
+                        'cfd_results': None,
+                        'fusion_weights': {'ai': 1.0, 'cfd': 0.0}
+                    })
+                
+                if np.any(np.isnan(cfd_results['temperature_field'])):
+                    self.logger.warning("CFD结果包含NaN值，使用AI预测结果")
+                    return ai_pred if not return_details else (ai_pred, {
+                        'ai_prediction': ai_pred,
+                        'ai_attention': ai_attention,
+                        'cfd_results': None,
+                        'fusion_weights': {'ai': 1.0, 'cfd': 0.0}
+                    })
 
-            # 4. 结果融合
-            final_prediction = self.fuse_predictions(ai_pred, cfd_results)
-            self.logger.info("预测融合完成")
+                # 4. 结果融合
+                final_prediction = self.fuse_predictions(ai_pred, cfd_results)
+                self.logger.info("预测融合完成")
+            except Exception as e:
+                self.logger.warning(f"CFD模拟失败: {str(e)}，使用AI预测结果")
+                return ai_pred if not return_details else (ai_pred, {
+                    'ai_prediction': ai_pred,
+                    'ai_attention': ai_attention,
+                    'cfd_results': None,
+                    'fusion_weights': {'ai': 1.0, 'cfd': 0.0}
+                })
 
             if return_details:
                 return final_prediction, {
@@ -144,35 +182,68 @@ class HybridModel(nn.Module):
         Returns:
             融合后的预测结果
         """
-        # 1. 提取CFD温度场的关键点
-        cfd_temp = cfd_results['temperature_field']
+        try:
+            # 1. 提取CFD温度场的关键点
+            cfd_temp = cfd_results['temperature_field']
+            
+            # 检查CFD温度场是否有效
+            if np.any(np.isnan(cfd_temp)):
+                self.logger.warning("CFD温度场包含NaN值，使用AI预测结果")
+                return ai_pred
 
-        # 2. 计算置信度
-        ai_confidence = self.calculate_ai_confidence(ai_pred)
-        cfd_confidence = self.calculate_cfd_confidence(cfd_temp)
+            # 2. 计算置信度
+            ai_confidence = self.calculate_ai_confidence(ai_pred)
+            cfd_confidence = self.calculate_cfd_confidence(cfd_temp)
 
-        # 3. 动态调整权重
-        local_weights = self.calculate_local_weights(
-            ai_confidence,
-            cfd_confidence
-        )
+            # 3. 动态调整权重
+            local_weights = self.calculate_local_weights(
+                ai_confidence,
+                cfd_confidence
+            )
 
-        # 4. 融合预测
-        fused_temp = (
-                local_weights['ai'] * ai_pred +
-                local_weights['cfd'] * self.extract_cfd_predictions(cfd_temp)
-        )
 
-        # 5. 应用温度约束
-        fused_temp = self.apply_temperature_constraints(fused_temp)
+            # 4. 提取CFD预测点
+            cfd_predictions = self.extract_cfd_predictions(cfd_temp)
+            if np.any(np.isnan(cfd_predictions)):
+                self.logger.warning("CFD预测点包含NaN值，使用AI预测结果")
+                return ai_pred
 
-        return fused_temp
+            # 5. 融合预测
+            fused_temp = (
+                    local_weights['ai'] * ai_pred +
+                    local_weights['cfd'] * cfd_predictions
+            )
+
+            # 6. 应用温度约束
+            fused_temp = self.apply_temperature_constraints(fused_temp)
+            
+            # 最终验证
+            if np.any(np.isnan(fused_temp)):
+                self.logger.warning("融合结果包含NaN值，使用AI预测结果")
+                return ai_pred
+                
+            return fused_temp
+            
+        except Exception as e:
+            self.logger.error(f"融合预测失败: {str(e)}，使用AI预测结果")
+            return ai_pred
 
     def calculate_ai_confidence(self, ai_pred):
         """计算AI预测的置信度"""
+        # 确保输入数据维度正确
+        if isinstance(ai_pred, torch.Tensor):
+            ai_pred = ai_pred.detach().cpu().numpy()
+        
+        # 如果输入是2D，添加序列维度
+        if len(ai_pred.shape) == 2:
+            ai_pred = ai_pred.reshape(ai_pred.shape[0], 1, -1)
+        # 如果输入是1D，添加批次和序列维度
+        elif len(ai_pred.shape) == 1:
+            ai_pred = ai_pred.reshape(1, 1, -1)
+            
         # 基于预测方差计算置信度
         _, lower, upper = self.predictor.calculate_prediction_interval(ai_pred)
-        confidence = 1.0 / (upper - lower)
+        confidence = 1.0 / (upper - lower + 1e-6)  # 添加小值避免除零
         return np.clip(confidence, 0, 1)
 
     def calculate_cfd_confidence(self, cfd_temp):
@@ -187,7 +258,14 @@ class HybridModel(nn.Module):
 
     def calculate_local_weights(self, ai_confidence, cfd_confidence):
         """计算局部权重"""
-        total_confidence = ai_confidence + cfd_confidence
+        # 添加小值避免除零
+        epsilon = 1e-10
+        
+        # 处理无效值
+        ai_confidence = np.nan_to_num(ai_confidence, nan=0.0)
+        cfd_confidence = np.nan_to_num(cfd_confidence, nan=0.0)
+        
+        total_confidence = ai_confidence + cfd_confidence + epsilon
 
         weights = {
             'ai': (ai_confidence / total_confidence) * self.ai_weight.item(),
@@ -195,7 +273,7 @@ class HybridModel(nn.Module):
         }
 
         # 归一化权重
-        total_weight = sum(weights.values())
+        total_weight = sum(weights.values()) + epsilon
         return {k: v / total_weight for k, v in weights.items()}
 
     def extract_cfd_predictions(self, cfd_temp):

@@ -212,7 +212,19 @@ class ModelEvaluator:
 
         # 保存指标
         with open(output_path / 'evaluation_metrics.json', 'w') as f:
-            json.dump(metrics, f, indent=4)
+            # 转换numpy类型为Python原生类型
+            def convert_to_native(obj):
+                if isinstance(obj, (np.integer, np.floating)):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {k: convert_to_native(v) for k, v in obj.items()}
+                elif isinstance(obj, (list, tuple)):
+                    return [convert_to_native(item) for item in obj]
+                return obj
+            
+            json.dump(convert_to_native(metrics), f, indent=4)
 
         # 保存预测结果
         results_df = pd.DataFrame({

@@ -26,23 +26,15 @@ class Visualizer:
 
     def plot_training_history(self, history, save=True):
         """绘制训练历史"""
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+        plt.figure(figsize=(10, 6))
 
         # 损失曲线
-        ax1.plot(history['train_loss'], label='Training Loss')
-        ax1.plot(history['val_loss'], label='Validation Loss')
-        ax1.set_title('Model Loss Over Time')
-        ax1.set_xlabel('Epoch')
-        ax1.set_ylabel('Loss')
-        ax1.legend()
-
-        # 准确率曲线
-        ax2.plot(history['train_accuracy'], label='Training Accuracy')
-        ax2.plot(history['val_accuracy'], label='Validation Accuracy')
-        ax2.set_title('Model Accuracy Over Time')
-        ax2.set_xlabel('Epoch')
-        ax2.set_ylabel('Accuracy')
-        ax2.legend()
+        plt.plot(history['train_loss'], label='Training Loss')
+        plt.plot(history['val_loss'], label='Validation Loss')
+        plt.title('Model Loss Over Time')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
 
         plt.tight_layout()
 
@@ -98,10 +90,15 @@ class Visualizer:
         """绘制误差分布"""
         plt.figure(figsize=(10, 6))
 
-        plt.hist(errors, bins=30, density=True, alpha=0.7)
-        kde = stats.gaussian_kde(errors)
-        x_range = np.linspace(min(errors), max(errors), 200)
-        plt.plot(x_range, kde(x_range), 'r-', lw=2)
+        # 确保errors是一维数组
+        errors = np.ravel(errors)
+
+        # 只使用直方图显示误差分布
+        plt.hist(errors, bins=30, density=False, alpha=0.7, color='blue', label='Error Distribution')
+        plt.axvline(x=np.mean(errors), color='r', linestyle='--', label=f'Mean Error: {np.mean(errors):.2f}°C')
+        plt.axvline(x=np.median(errors), color='g', linestyle='--', label=f'Median Error: {np.median(errors):.2f}°C')
+        
+        plt.legend()
         plt.title('Prediction Error Distribution')
         plt.xlabel('Error (°C)')
         plt.ylabel('Count')

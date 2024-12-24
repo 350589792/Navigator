@@ -1,5 +1,3 @@
-# models/ai_model.py
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -60,7 +58,10 @@ class GlassFurnaceModel(nn.Module):
                 if 'lstm' in name:
                     nn.init.orthogonal_(param)
                 else:
-                    nn.init.xavier_uniform_(param)
+                    if len(param.shape) >= 2:
+                        nn.init.xavier_uniform_(param)
+                    else:
+                        nn.init.uniform_(param, -0.1, 0.1)
             elif 'bias' in name:
                 nn.init.constant_(param, 0)
 
@@ -73,6 +74,30 @@ class GlassFurnaceModel(nn.Module):
 
     def forward(self, x):
         """前向传播"""
+        # 确保输入是tensor类型
+        if isinstance(x, np.ndarray):
+            x = torch.from_numpy(x).float()
+        elif not isinstance(x, torch.Tensor):
+            x = torch.tensor(x, dtype=torch.float32)
+
+        # 添加缺失的维度
+        if len(x.shape) == 1:
+            x = x.unsqueeze(0).unsqueeze(0)  # 添加batch和sequence维度
+        elif len(x.shape) == 2:
+            x = x.unsqueeze(1)  # 添加sequence维度
+            
+        # 确保特征维度正确
+        if x.size(-1) != self.input_size:
+            if x.size(-1) < self.input_size:
+                padding = torch.zeros(*x.shape[:-1], self.input_size - x.size(-1), device=x.device)
+                x = torch.cat([x, padding], dim=-1)
+            else:
+                x = x[..., :self.input_size]
+
+        # 确保在正确的设备上
+        if hasattr(self, 'lstm') and next(self.lstm.parameters()).device != x.device:
+            x = x.to(next(self.lstm.parameters()).device)
+
         # LSTM处理
         lstm_out, _ = self.lstm(x)
 
