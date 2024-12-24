@@ -156,7 +156,7 @@ def parse_arguments():
     if current_dir not in sys.path:
         sys.path.append(current_dir)
     
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation')
     
     # UAV Network Configuration
     parser.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
@@ -171,6 +171,8 @@ def parse_arguments():
     parser.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
     parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
+    parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
+    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs')
     
     # Federated Learning Parameters
     parser.add_argument('--num_rounds', type=int, default=100, help='Number of federated learning rounds')
@@ -178,17 +180,12 @@ def parse_arguments():
     parser.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
     parser.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
     
-    # Training Parameters
-    parser.add_argument('--device', default='cpu', help='Device to use (cpu/cuda)')
+    # System Configuration
+    parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'], help='Device to use (cpu/cuda)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
-    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs')
-    parser.add_argument('--path_model', default='./model/rgnn_10.pt', help='Path to save model')
-    
-    
-    # Model Checkpointing
-    parser.add_argument('--checkpoint_dir', default='./checkpoints', help='Directory to save model checkpoints')
-    parser.add_argument('--log_dir', default='./logs', help='Directory to save training logs')
+    parser.add_argument('--path_model', type=str, default='./model/rgnn_10.pt', help='Path to save model')
+    parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save model checkpoints')
+    parser.add_argument('--log_dir', type=str, default='./logs', help='Directory to save training logs')
     
     # Parse arguments
     args = parser.parse_args()
