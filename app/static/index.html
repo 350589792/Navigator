@@ -41,8 +41,13 @@
         }
         .results {
             margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
         }
         .similar-cases, .laws {
+            flex: 1;
+            min-width: 300px;
             margin-top: 20px;
             padding: 15px;
             border: 1px solid #ddd;
@@ -63,6 +68,14 @@
             color: #666;
             font-size: 0.9em;
         }
+        @media (max-width: 768px) {
+            .results {
+                flex-direction: column;
+            }
+            .similar-cases, .laws {
+                min-width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -76,13 +89,13 @@
             正在分析中，请稍候...
         </div>
         <div class="results" id="results">
-            <div class="similar-cases">
-                <h2>相似案例</h2>
-                <div id="similarCases"></div>
-            </div>
             <div class="laws">
                 <h2>相关法条</h2>
                 <div id="relevantLaws"></div>
+            </div>
+            <div class="similar-cases">
+                <h2>相似案例</h2>
+                <div id="similarCases"></div>
             </div>
         </div>
     </div>
