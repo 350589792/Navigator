@@ -324,9 +324,6 @@ def main():
     
     logging.info(f"\nSimulation complete. All results saved to {results_dir}")
 
-if __name__ == "__main__":
-    main()
-
 if __name__ == '__main__':
     try:
         main()
