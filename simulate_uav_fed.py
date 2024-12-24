@@ -15,21 +15,10 @@ from pathlib import Path
 import random
 import warnings
 
-# Add project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 # Suppress warnings
 warnings.filterwarnings('ignore')
 
-# Configure logging at import time
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
 # Configure logging
-logging.basicConfig(level=logging.INFO,
-                   format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Import federated learning components
@@ -180,12 +169,25 @@ def plot_results(results, save_dir):
 def parse_arguments():
     """Parse command line arguments."""
     try:
-        from gnn_fed_config_new import get_args
-        args = get_args()
+        import os
+        import sys
+        # Add the project root to Python path
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+        
+        # Import and use the argument parser from gnn_fed_config_new
+        from gnn_fed_config_new import get_default_args
+        parser = get_default_args()
+        args = parser.parse_args()
         print("\nParsed arguments:", vars(args))
         return args
     except ImportError as e:
         print(f"Error importing configuration: {e}")
+        print(f"Python path: {sys.path}")
+        raise
+    except Exception as e:
+        print(f"Unexpected error: {e}")
         raise
 
 def main():
