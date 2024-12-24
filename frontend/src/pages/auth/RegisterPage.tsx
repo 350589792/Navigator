@@ -33,11 +33,12 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const { email, password } = formData;
+      const { email, password, phone } = formData;
       await register({
         email,
         password,
-        name: email.split('@')[0] // Use part of email as name for now
+        name: email.split('@')[0],
+        phone: phone || undefined
       });
       navigate('/login');
     } catch (err) {

@@ -32,6 +32,21 @@ def login(
         "token_type": "bearer"
     }
 
+@router.post("/refresh-token", response_model=Token)
+def refresh_token(
+    current_user: User = Depends(deps.get_current_user),
+    db: Session = Depends(deps.get_db),
+) -> Any:
+    """
+    Refresh access token.
+    """
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return {
+        "access_token": create_access_token(current_user.id),
+        "token_type": "bearer"
+    }
+
 @router.post("/register", response_model=User)
 def register(
     *,
@@ -41,6 +56,11 @@ def register(
     """
     Register new user.
     """
+    if not user_in.name or len(user_in.name.strip()) < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid name provided"
+        )
     user = crud_user.get_by_email(db, email=user_in.email)
     if user:
         raise HTTPException(
