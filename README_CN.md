@@ -105,14 +105,49 @@
 - 确保已安装最新版本的 pip 和 poetry
 - 尝试使用管理员权限运行命令
 
-### 2. 启动服务失败
+### 2. npm安装依赖出现ECONNRESET错误
+- 尝试切换npm镜像源：
+  ```cmd
+  npm config set registry https://registry.npmmirror.com/
+  ```
+- 或使用其他包管理器：
+  ```cmd
+  # 使用pnpm
+  npm install -g pnpm
+  pnpm install
+
+  # 或使用yarn
+  npm install -g yarn
+  yarn install
+  ```
+- 如果仍然失败，检查防火墙设置和网络代理配置
+
+### 3. 启动服务失败
 - 确保所有依赖都已正确安装
 - 检查端口 5173 和 8000 是否被占用
 - 查看控制台错误信息
 
-### 3. 系统响应缓慢
+### 4. 系统响应缓慢
 - 检查网络连接状况
 - 确保系统内存充足
 - 可能是首次加载模型较慢，请耐心等待
+
+### 5. Windows特定问题
+- 如遇到"'vite' 不是内部或外部命令"错误：
+  ```cmd
+  # 确保在正确目录下
+  cd frontend/traffic_case_ui
+  # 重新安装依赖
+  pnpm install
+  # 启动开发服务器
+  pnpm dev
+  # 或使用npx运行
+  npx vite
+  ```
+- Node.js环境变量问题：
+  1. 右键"此电脑" -> "属性" -> "高级系统设置" -> "环境变量"
+  2. 检查Path变量中是否包含Node.js安装路径
+  3. 如果没有，添加Node.js安装目录（通常在C:\Program Files\nodejs）
+- 使用管理员权限运行命令提示符可能解决某些权限问题
 
 如遇其他问题，请查看控制台输出的错误信息，或联系技术支持。
