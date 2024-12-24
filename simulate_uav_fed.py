@@ -152,7 +152,6 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation', allow_abbrev=False)
     
     # Training parameters
-    # Training parameters
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
     parser.add_argument('--device', type=str, default='cpu', help='Device to use (cpu/cuda)')
@@ -167,6 +166,7 @@ def parse_arguments():
     # Federated learning parameters
     parser.add_argument('--num_rounds', type=int, default=20, help='Number of federated learning rounds')
     parser.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
+    parser.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
     
     # Network configuration
     parser.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
@@ -176,13 +176,9 @@ def parse_arguments():
     parser.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
     parser.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
     
-    # Network configuration
-    parser.add_argument('--n_users_small', type=int, default=10, help='Number of users for small network')
-    parser.add_argument('--n_uavs_small', type=int, default=2, help='Number of UAVs for small network')
-    parser.add_argument('--n_users_medium', type=int, default=20, help='Number of users for medium network')
-    parser.add_argument('--n_uavs_medium', type=int, default=5, help='Number of UAVs for medium network')
-    parser.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
-    parser.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
+    # Additional parameters
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
     
     args = parser.parse_args()
     return args
