@@ -1,0 +1,6 @@
+usage: simulate_uav_fed.py [-h] [--batch_size BATCH_SIZE]
+                           [--train_num TRAIN_NUM] [--device DEVICE]
+                           [--hidden_dim HIDDEN_DIM] [--alpha ALPHA]
+                           [--learning_rate LEARNING_RATE] [--epochs EPOCHS]
+                           [--path_model PATH_MODEL]
+simulate_uav_fed.py: error: unrecognized arguments: --num_rounds 3 --local_epochs 2 --n_users_small 5 --n_uavs_small 2 --n_users_medium 8 --n_uavs_medium 3 --n_users_large 12 --n_uavs_large 4 --checkpoint_dir ./checkpoints --log_dir ./logs
