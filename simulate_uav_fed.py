@@ -149,7 +149,7 @@ def plot_results(results, save_dir):
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation', allow_abbrev=False)
+    parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation')
     
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
@@ -159,6 +159,8 @@ def parse_arguments():
     parser.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
+    
+    # Model paths and directories
     parser.add_argument('--path_model', type=str, default='./model/rgnn_fed.pt', help='Path to save model')
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save checkpoints')
     parser.add_argument('--log_dir', type=str, default='./logs', help='Directory to save logs')
