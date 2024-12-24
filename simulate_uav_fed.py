@@ -11,6 +11,10 @@ import argparse
 import torch.nn.functional as F
 import psutil
 import logging
+from datetime import datetime
+from pathlib import Path
+import random
+import warnings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -147,15 +151,6 @@ def plot_results(results, save_dir):
 
 def parse_arguments():
     """Parse command line arguments using consolidated configuration."""
-    import os
-    import sys
-    import argparse
-    
-    # Add current directory to Python path
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    if current_dir not in sys.path:
-        sys.path.append(current_dir)
-    
     parser = argparse.ArgumentParser(description='UAV Network Federated Learning Simulation')
     
     # UAV Network Configuration
@@ -173,21 +168,18 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=512, help='Batch size')
     parser.add_argument('--train_num', type=int, default=4096, help='Number of training samples')
     parser.add_argument('--epochs', type=int, default=500, help='Number of epochs')
-    
-    # Federated Learning Parameters
     parser.add_argument('--num_rounds', type=int, default=100, help='Number of federated learning rounds')
     parser.add_argument('--local_epochs', type=int, default=5, help='Number of local training epochs')
-    parser.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
     parser.add_argument('--eval_interval', type=int, default=5, help='Evaluation interval in rounds')
-    
-    # System Configuration
+    parser.add_argument('--client_sample_ratio', type=float, default=1.0, help='Ratio of clients to sample per round')
     parser.add_argument('--device', type=str, default='cpu', choices=['cpu', 'cuda'], help='Device to use (cpu/cuda)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--path_model', type=str, default='./model/rgnn_10.pt', help='Path to save model')
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints', help='Directory to save model checkpoints')
     parser.add_argument('--log_dir', type=str, default='./logs', help='Directory to save training logs')
     
-    return parser.parse_args()
+    args = parser.parse_args()
+    return args
 
 def main():
     """Main function for UAV Network Federated Learning Simulation."""
