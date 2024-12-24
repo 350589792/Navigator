@@ -10,7 +10,11 @@ import random
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
-from gnn_fed_config import args
+from gnn_fed_config_new import get_default_args
+
+# Get default configuration
+parser = get_default_args()
+args = parser.parse_args()
 from sklearn.cluster import KMeans
 
 

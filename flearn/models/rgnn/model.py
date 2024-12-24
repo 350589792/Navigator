@@ -4,7 +4,11 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from typing import Optional
 from torch import Tensor
-from flearn.models.rgnn.configs import args
+from flearn.models.rgnn.configs_new import get_default_args
+
+# Get default configuration
+parser = get_default_args()
+args = parser.parse_args()
 import numpy as np
 import random
 from tqdm import tqdm
