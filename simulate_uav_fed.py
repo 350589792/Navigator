@@ -30,13 +30,16 @@ except ImportError as e:
 
 def run_simulation(n_users, n_uavs, args):
     """Run federated learning simulation with specified number of UAVs."""
-    print(f"\nStarting simulation with {n_uavs} UAVs and {n_users} users")
-    print(f"Configuration:")
-    print(f"- Network: {n_users} users, {n_uavs} UAVs")
-    print(f"- Training: batch_size={args.batch_size}, learning_rate={args.learning_rate}")
-    print(f"- Rounds: {args.num_rounds} global rounds, {args.local_epochs} local epochs")
-    print(f"- Model: hidden_dim={args.hidden_dim}, alpha={args.alpha}")
-    print(f"- Device: {args.device}")
+    logger.info(f"\nStarting simulation with {n_uavs} UAVs and {n_users} users")
+    logger.info("Configuration:")
+    logger.info(f"- Network: {n_users} users, {n_uavs} UAVs")
+    logger.info(f"- Training: batch_size={args.batch_size}, learning_rate={args.learning_rate}")
+    logger.info(f"- Rounds: {args.num_rounds} global rounds, {args.local_epochs} local epochs")
+    logger.info(f"- Model: hidden_dim={args.hidden_dim}, alpha={args.alpha}")
+    logger.info(f"- Device: {args.device}")
+    logger.info(f"- Client Sample Ratio: {args.client_sample_ratio}")
+    logger.info(f"- Evaluation Interval: {args.eval_interval}")
+    logger.info(f"- Random Seed: {args.seed}")
     
     # Record start time and initial resource usage
     start_time = time.time()
@@ -83,23 +86,26 @@ def run_simulation(n_users, n_uavs, args):
         dataset="uav_network",
         algorithm="fedl",
         model_config=model_config,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
+        batch_size=model_config.batch_size,
+        learning_rate=model_config.learning_rate,
         hyper_learning_rate=0.01,
         L=0.1,
-        num_glob_iters=args.num_rounds,
-        local_epochs=args.local_epochs,
+        num_glob_iters=model_config.num_rounds,
+        local_epochs=model_config.local_epochs,
         optimizer="fedl",
-        num_users=n_users,  # Total number of users in the network
-        num_uavs=n_uavs,   # Number of UAV nodes
+        num_users=model_config.num_users,
+        num_uavs=model_config.num_uavs,
         rho=1.0,
         times=1,
-        hidden_dim=args.hidden_dim,
-        train_num=args.train_num,
-        alpha=args.alpha,
-        device=args.device,
-        checkpoint_dir=args.checkpoint_dir,
-        log_dir=args.log_dir
+        hidden_dim=model_config.hidden_dim,
+        train_num=model_config.train_num,
+        alpha=model_config.alpha,
+        device=model_config.device,
+        checkpoint_dir=model_config.checkpoint_dir,
+        log_dir=model_config.log_dir,
+        client_sample_ratio=model_config.client_sample_ratio,
+        seed=model_config.seed,
+        eval_interval=model_config.eval_interval
     )
     
     # Train the model using server's built-in training method
