@@ -115,10 +115,12 @@ class EntropyWeightCalculator:
 class TailgatingDetector:
     def __init__(self, threat_calculator: ThreatCalculator,
                  entropy_calculator: EntropyWeightCalculator,
-                 threat_threshold: float = 3.0):
+                 threat_threshold: float = 2.0):
         self.threat_calculator = threat_calculator
         self.entropy_calculator = entropy_calculator
         self.threat_threshold = threat_threshold
+        self.contour_area_threshold = 1000  # Increased contour area threshold
+        self.motion_detection_threshold = 35  # Adjusted motion detection threshold
         self.history: List[Tuple[Person, Person]] = []  # Store (target, follower) pairs
 
 
@@ -151,9 +153,9 @@ class TailgatingDetector:
         )
         
         # Determine tailgating type based on angle
-        if abs(angle) > 150:  # Within 30 degrees of direct rear
+        if abs(angle) > 140:  # Adjusted threshold for direct rear
             tailgating_type = TailgatingType.DIRECT
-        elif abs(angle) < 30:  # Nearly parallel movement
+        elif abs(angle) < 50:  # Adjusted threshold for horizontal movement
             tailgating_type = TailgatingType.HORIZONTAL
         else:
             tailgating_type = TailgatingType.LATERAL
