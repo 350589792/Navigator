@@ -144,14 +144,21 @@ class FEDL(Server):
         total_samples = 0
         
         for user in self.selected_users:
-            user_samples = len(user.train_data['features'])
+            # Handle GNNDataset objects
+            if hasattr(user, 'train_samples'):
+                user_samples = user.train_samples
+            else:
+                # For GNNDataset, use length of dataset
+                user_samples = len(user.trainloader.dataset)
+                user.train_samples = user_samples  # Cache for future use
+            
             total_samples += user_samples
             
             # Get user metrics
-            train_loss += user.train_samples * user.train_loss
-            train_acc += user.train_samples * user.train_accuracy
-            test_loss += user.train_samples * user.test_loss
-            test_acc += user.train_samples * user.test_accuracy
+            train_loss += user_samples * user.train_loss
+            train_acc += user_samples * user.train_accuracy
+            test_loss += user_samples * user.test_loss
+            test_acc += user_samples * user.test_accuracy
         
         # Compute weighted averages
         train_loss /= total_samples

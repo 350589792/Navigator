@@ -37,10 +37,20 @@ class FEDLOptimizer(Optimizer):
             loss = closure
         for group in self.param_groups:
             for p, server_grad, pre_grad in zip(group['params'],server_grads, pre_grads):
-                if(server_grad.grad != None and pre_grad.grad != None):
-                    p.data = p.data - group['lr'] * (p.grad.data + group['hyper_lr'] * server_grad.grad.data - pre_grad.grad.data)
-                else:
-                     p.data = p.data - group['lr'] * p.grad.data
+                # Skip if any of the required gradients are None
+                if p.grad is None:
+                    continue
+                    
+                # Initialize update term with local gradient
+                update = p.grad.data
+                
+                # Add server and previous gradients if available
+                if hasattr(server_grad, 'grad') and server_grad.grad is not None and \
+                   hasattr(pre_grad, 'grad') and pre_grad.grad is not None:
+                    update = update + group['hyper_lr'] * server_grad.grad.data - pre_grad.grad.data
+                
+                # Apply update
+                p.data = p.data - group['lr'] * update
         return loss
 
 class pFedMeOptimizer(Optimizer):

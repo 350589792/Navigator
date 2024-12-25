@@ -107,17 +107,23 @@ class FedUAVGNN(nn.Module):
                 cell_state: LSTM cell state
                 latent: Latent pointer vector for next layer
         """
-        # Current node features (first node in batch)
-        x_current = x[0].unsqueeze(0)  # (1, n_feature)
-        
-        # All node features reshaped for batch
-        X_all = x.unsqueeze(0)  # (1, n_nodes, n_feature)
+        # Ensure input tensors are properly formatted
+        if x.dim() == 2:
+            # Current node features (first node in batch)
+            x_current = x[0].unsqueeze(0)  # (1, n_feature)
+            
+            # All node features reshaped for batch
+            X_all = x.unsqueeze(0)  # (1, n_nodes, n_feature)
+        else:
+            # Handle case where input is already batched
+            x_current = x[:, 0].unsqueeze(1)  # (batch_size, 1, n_feature)
+            X_all = x
         
         # Create mask for unvisited nodes (all False initially)
-        mask = torch.zeros(1, x.size(0), device=x.device)
+        mask = torch.zeros(X_all.size(0), X_all.size(1), device=x.device)
         
         # Process through RGNN
         prob_dist, h, c, latent = self.gnn_core(x_current, X_all, mask)
         
-        # For federated learning, we only need the probability distribution
-        return prob_dist
+        # Return all values for proper state tracking in federated learning
+        return prob_dist, h, c, latent

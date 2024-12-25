@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 try:
     from flearn.servers.serverfedl import FEDL
     from flearn.models.models import FedUAVGNN
-    from flearn.data.data_load_new import create_federated_data
+    from flearn.models.rgnn.data_load import create_federated_data
     from flearn.utils.metrics_logger import MetricsLogger
     logger.info("Successfully imported all required modules")
 except ImportError as e:
@@ -65,37 +65,20 @@ def run_simulation(n_users, n_uavs, args):
             self.n_users = n_users
             self.n_uavs = n_uavs
             
+            # Network size configurations
+            self.n_users_small = args.n_users_small
+            self.n_uavs_small = args.n_uavs_small
+            self.n_users_medium = args.n_users_medium
+            self.n_uavs_medium = args.n_uavs_medium
+            self.n_users_large = args.n_users_large
+            self.n_uavs_large = args.n_uavs_large
+            
             # Additional parameters
             self.seed = args.seed
             self.eval_interval = args.eval_interval
             self.client_sample_ratio = args.client_sample_ratio
     
     model_config = ModelConfig(args, n_users, n_uavs)
-    
-    # Get federated data and initialize server
-    uav_data = create_federated_data(n_users, n_uavs)
-    
-    # Split data into train/test sets for each UAV (80/20 split)
-    train_data = []
-    test_data = []
-    for uav_features, uav_edges in uav_data:
-        n_samples = uav_edges.shape[1]
-        n_train = int(0.8 * n_samples)
-        
-        # Randomly shuffle indices
-        indices = torch.randperm(n_samples)
-        train_idx = indices[:n_train]
-        test_idx = indices[n_train:]
-        
-        # Split features and edges
-        train_data.append((
-            uav_features,
-            uav_edges[:, train_idx]
-        ))
-        test_data.append((
-            uav_features,
-            uav_edges[:, test_idx]
-        ))
     
     # Initialize server with configuration
     server = FEDL(
@@ -109,12 +92,10 @@ def run_simulation(n_users, n_uavs, args):
         num_glob_iters=model_config.num_rounds,
         local_epochs=model_config.local_epochs,
         optimizer="fedl",
-        num_users=model_config.n_users,
+        num_users=n_uavs,  # Use the actual number of UAVs
         rho=1.0,
         times=1,
-        hidden_dim=model_config.hidden_dim,
-        train_data=train_data,
-        test_data=test_data
+        hidden_dim=model_config.hidden_dim
     )
     
     # Record start time and initial resource usage

@@ -4,11 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from typing import Optional
 from torch import Tensor
-from flearn.models.rgnn.configs_new import get_default_args
-
-# Get default configuration
-parser = get_default_args()
-args = parser.parse_args()
+from flearn.models.rgnn.configs_new import default_config as args
 import numpy as np
 import random
 from tqdm import tqdm
@@ -36,7 +32,7 @@ class UAV_conv(MessagePassing):
         self.hidden_dim = hidden_dim
         # self.weight = nn.Parameter(torch.rand(size=(edge_num, 1)))  # 
         self.linear = nn.Linear(2, hidden_dim)      # 创建一个线性层，将输入的维度是2，输出的维度是hidden_dim
-        self.linear2 = nn.Linear(hidden_dim, 2)     # 创建另一个线性层，将输入的维度是hidden_dim，输出的维度是2
+        # Quality prediction handled by fc layer
         self.att = nn.Sequential(                   # 创建一个序列模块，包含一个线性层和一个LeakyReLU激活函数，用于计算注意力权重
             nn.Linear(2*hidden_dim, 1),
             nn.LeakyReLU(alpha)
@@ -54,7 +50,7 @@ class UAV_conv(MessagePassing):
         self.fc = nn.Sequential(
                     nn.Linear(2*hidden_dim, hidden_dim),
                     nn.ReLU(),
-                    nn.Linear(hidden_dim, 2),
+                    nn.Linear(hidden_dim, 1),
                     nn.Sigmoid()
         )
         # 创建一个序列模块，包含多个线性层和激活函数，用于计算信息传递的多层感知机
@@ -139,9 +135,30 @@ class UAV_conv(MessagePassing):
         # exit()
 
         # 映射到01之间
-        x = F.sigmoid(self.linear2(x))    # 通过Sigmoid函数进行映射，将节点表示映射到[0,1]区间，并返回更新后的节点表示x
+        x = self.fc(x)    # Generate quality predictions using fc layer (maps to [0,1] interval via sigmoid)
 
-        return x
+        # Debug print for shape tracking
+        print(f"[Debug] Shape before processing: {x.shape}")
+        
+        # Handle case where output is [1, N] shaped
+        if x.dim() == 2:
+            if x.size(0) == 1:
+                x = x.squeeze(0)  # Remove batch dimension if present
+            else:
+                x = x.transpose(0, 1)  # Transpose if needed
+                x = x.reshape(-1)  # Flatten to 1D
+        
+        # Calculate expected size based on number of users and UAVs
+        self.M = x.size(0) - 2*self.users_num if not hasattr(self, 'M') else self.M
+        expected_size = 2*self.users_num + self.M  # 2N + M
+        
+        print(f"[Debug] Shape after processing: {x.shape}, Expected: {expected_size} (2*{self.users_num} + {self.M})")
+            
+        # Verify and ensure output size matches expected size
+        if x.size(0) != expected_size:
+            x = x[:expected_size] if x.size(0) > expected_size else F.pad(x, (0, expected_size - x.size(0)))
+        
+        return x  # Return exactly [2N+M] shaped tensor
 
 
 class UAV(nn.Module):

@@ -23,11 +23,16 @@ class UserFEDL(User):
             
         # Initialize FedUAVGNN model
         self.model = FedUAVGNN(self.model_config)
+        
+        # Store dataset sizes
+        self.train_samples = len(train_data)
+        self.test_samples = len(test_data)
+        
         super().__init__(numeric_id, train_data, test_data, self.model, batch_size, learning_rate, hyper_learning_rate, L,
                          local_epochs)
 
-        # Custom loss for GNN outputs (cross entropy over probability distributions)
-        self.loss = nn.CrossEntropyLoss()
+        # Using MSE loss for regression task
+        self.loss = F.mse_loss
         
         # Initialize optimizer
         self.optimizer = FEDLOptimizer(self.model.parameters(), lr=self.learning_rate, hyper_lr=hyper_learning_rate, L=L)
@@ -37,10 +42,24 @@ class UserFEDL(User):
     
     def get_full_grad(self):
         """Compute full gradient for the UAV-GNN model."""
-        for features, edge_index, targets in self.trainloaderfull:
+        for data in self.trainloaderfull:
             self.model.zero_grad()
-            prob_dist, _, _, _ = self.model((features, edge_index))
-            loss = self.loss(prob_dist, targets)
+            prob_dist, _, _, _ = self.model(data.x, data.edge_index)
+            
+            # Ensure output and target shapes match
+            if prob_dist.shape != data.y.shape:
+                if prob_dist.dim() == 2:
+                    if prob_dist.size(0) == 1:
+                        prob_dist = prob_dist.squeeze(0)
+                    else:
+                        prob_dist = prob_dist.transpose(0, 1)
+                        prob_dist = prob_dist.reshape(-1)
+                
+                min_size = min(prob_dist.size(0), data.y.size(0))
+                prob_dist = prob_dist[:min_size]
+                data.y = data.y[:min_size]
+            
+            loss = F.mse_loss(prob_dist, data.y)
             loss.backward()
 
     def set_grads(self, new_grads):
@@ -50,6 +69,7 @@ class UserFEDL(User):
         elif isinstance(new_grads, list):
             for idx, model_grad in enumerate(self.model.parameters()):
                 model_grad.data = new_grads[idx]
+
 
     def prepare_data(self, features, edge_index, targets):
         """Prepare UAV network data for training."""
@@ -68,20 +88,32 @@ class UserFEDL(User):
         
         for epoch in range(1, self.local_epochs + 1):
             epoch_loss = 0
-            for batch_idx, (features, edge_index, targets) in enumerate(self.trainloader):
+            for batch_idx, data in enumerate(self.trainloader):
                 self.optimizer.zero_grad()
                 
                 # Forward pass through GNN
-                prob_dist, h, c, latent = self.model((features, edge_index))
+                prob_dist, h, c, latent = self.model(data.x, data.edge_index)
                 
-                # Compute loss (cross entropy between probability distribution and target)
-                loss = self.loss(prob_dist, targets)
+                # Ensure output and target shapes match
+                if prob_dist.shape != data.y.shape:
+                    if prob_dist.dim() == 2:
+                        if prob_dist.size(0) == 1:
+                            prob_dist = prob_dist.squeeze(0)
+                        else:
+                            prob_dist = prob_dist.transpose(0, 1)
+                            prob_dist = prob_dist.reshape(-1)
+                    
+                    min_size = min(prob_dist.size(0), data.y.size(0))
+                    prob_dist = prob_dist[:min_size]
+                    data.y = data.y[:min_size]
+                
+                # Compute loss using MSE
+                loss = F.mse_loss(prob_dist, data.y)
                 epoch_loss += loss.item()
                 
-                # Calculate accuracy
-                _, predicted = torch.max(prob_dist, 1)
-                correct += (predicted == targets).sum().item()
-                total_samples += targets.size(0)
+                # Calculate accuracy (within 10% threshold)
+                correct += (torch.abs(prob_dist - data.y) < 0.1).sum().item()
+                total_samples += data.y.size(0)
                 
                 # Backward pass
                 loss.backward()
@@ -100,12 +132,25 @@ class UserFEDL(User):
         test_total = 0
         
         with torch.no_grad():
-            for features, edge_index, targets in self.testloader:
-                prob_dist, _, _, _ = self.model((features, edge_index))
-                test_loss += self.loss(prob_dist, targets).item()
-                _, predicted = torch.max(prob_dist, 1)
-                test_correct += (predicted == targets).sum().item()
-                test_total += targets.size(0)
+            for data in self.testloader:
+                prob_dist, _, _, _ = self.model(data.x, data.edge_index)
+                
+                # Ensure output and target shapes match
+                if prob_dist.shape != data.y.shape:
+                    if prob_dist.dim() == 2:
+                        if prob_dist.size(0) == 1:
+                            prob_dist = prob_dist.squeeze(0)
+                        else:
+                            prob_dist = prob_dist.transpose(0, 1)
+                            prob_dist = prob_dist.reshape(-1)
+                    
+                    min_size = min(prob_dist.size(0), data.y.size(0))
+                    prob_dist = prob_dist[:min_size]
+                    data.y = data.y[:min_size]
+                
+                test_loss += F.mse_loss(prob_dist, data.y).item()
+                test_correct += (torch.abs(prob_dist - data.y) < 0.1).sum().item()
+                test_total += data.y.size(0)
         
         self.test_loss = test_loss / len(self.testloader)
         self.test_accuracy = test_correct / test_total

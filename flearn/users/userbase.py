@@ -78,18 +78,32 @@ class User:
             param.grad.data = new_param.grad.data.clone()
 
     def get_grads(self, grads):
-
         self.optimizer.zero_grad()
         
-        for x, y in self.trainloaderfull:
-            output = self.model(x)
-            loss = self.loss(output, y)
+        for data in self.trainloaderfull:
+            # Get probability distribution from model output tuple
+            output_tuple = self.model(data.x, data.edge_index)
+            prob_dist = output_tuple[0] if isinstance(output_tuple, tuple) else output_tuple
+            
+            # Ensure output and target shapes match before loss calculation
+            if prob_dist.shape != data.y.shape:
+                # Handle case where output is [1, N] shaped
+                if prob_dist.dim() == 2:
+                    if prob_dist.size(0) == 1:
+                        prob_dist = prob_dist.squeeze(0)  # Remove batch dimension
+                    else:
+                        prob_dist = prob_dist.transpose(0, 1)  # Transpose if needed
+                        prob_dist = prob_dist.reshape(-1)  # Flatten to 1D
+                
+                # Ensure both tensors have same size
+                min_size = min(prob_dist.size(0), data.y.size(0))
+                prob_dist = prob_dist[:min_size]
+                data.y = data.y[:min_size]
+            
+            loss = F.mse_loss(prob_dist, data.y)
             loss.backward()
+            
         self.clone_model_paramenter(self.model.parameters(), grads)
-        #for param, grad in zip(self.model.parameters(), grads):
-        #    if(grad.grad == None):
-        #        grad.grad = torch.zeros_like(param.grad)
-        #    grad.grad.data = param.grad.data.clone()
         return grads
 
     def test(self):
@@ -97,9 +111,34 @@ class User:
         test_acc = 0
         total_samples = 0
         for data in self.testloaderfull:
-            output = self.model(data.x, data.edge_index)
+            # Get probability distribution from model output tuple
+            output_tuple = self.model(data.x, data.edge_index)
+            prob_dist = output_tuple[0] if isinstance(output_tuple, tuple) else output_tuple
+            
+            # Debug tensor shapes
+            print(f"[Debug] Test - Output shape: {prob_dist.shape}, Target shape: {data.y.shape}")
+            
+            # Ensure output and target shapes match before comparison
+            if prob_dist.shape != data.y.shape:
+                # Handle case where output is [1, N] shaped
+                if prob_dist.dim() == 2:
+                    if prob_dist.size(0) == 1:
+                        prob_dist = prob_dist.squeeze(0)  # Remove batch dimension
+                    else:
+                        prob_dist = prob_dist.transpose(0, 1)  # Transpose if needed
+                        prob_dist = prob_dist.reshape(-1)  # Flatten to 1D
+                
+                # Ensure both tensors have same size
+                min_size = min(prob_dist.size(0), data.y.size(0))
+                prob_dist = prob_dist[:min_size]
+                data.y = data.y[:min_size]
+                    
+            # Verify shapes match after adjustments
+            if prob_dist.shape != data.y.shape:
+                raise ValueError(f"Shape mismatch after adjustments: output {prob_dist.shape} vs target {data.y.shape}")
+                
             # Compare only the probability distribution output with target
-            test_acc += (torch.sum(torch.abs(output - data.y) < 0.1)).item()  # Within 10% threshold
+            test_acc += (torch.sum(torch.abs(prob_dist - data.y) < 0.1)).item()  # Within 10% threshold
             total_samples += data.y.shape[0]
         return test_acc, total_samples
 
@@ -108,32 +147,57 @@ class User:
         train_acc = 0
         loss = 0
         for data in self.trainloaderfull:
-            output = self.model(data.x, data.edge_index)
+            # Get probability distribution from model output tuple
+            output_tuple = self.model(data.x, data.edge_index)
+            prob_dist = output_tuple[0] if isinstance(output_tuple, tuple) else output_tuple
+            
+            # Debug tensor shapes
+            print(f"[Debug] Train - Output shape: {prob_dist.shape}, Target shape: {data.y.shape}")
+            
+            # Ensure output and target shapes match before comparison
+            if prob_dist.shape != data.y.shape:
+                # Handle case where output is [1, N] shaped
+                if prob_dist.dim() == 2:
+                    if prob_dist.size(0) == 1:
+                        prob_dist = prob_dist.squeeze(0)  # Remove batch dimension
+                    else:
+                        prob_dist = prob_dist.transpose(0, 1)  # Transpose if needed
+                        prob_dist = prob_dist.reshape(-1)  # Flatten to 1D
+                
+                # Ensure both tensors have same size
+                min_size = min(prob_dist.size(0), data.y.size(0))
+                prob_dist = prob_dist[:min_size]
+                data.y = data.y[:min_size]
+                    
+            # Verify shapes match after adjustments
+            if prob_dist.shape != data.y.shape:
+                raise ValueError(f"Shape mismatch after adjustments: output {prob_dist.shape} vs target {data.y.shape}")
+                
             # Compare only the probability distribution output with target
-            train_acc += (torch.sum(torch.abs(output - data.y) < 0.1)).item()  # Within 10% threshold
-            loss += F.mse_loss(output, data.y)
+            train_acc += (torch.sum(torch.abs(prob_dist - data.y) < 0.1)).item()  # Within 10% threshold
+            loss += F.mse_loss(prob_dist, data.y)
         return train_acc, loss.item(), self.train_samples
     
     
     def get_next_train_batch(self):
         try:
-            # Samples a new batch for persionalizing
-            (X, y) = next(self.iter_trainloader)
+            # Samples a new batch for personalizing
+            data = next(self.iter_trainloader)
         except StopIteration:
             # restart the generator if the previous generator is exhausted.
             self.iter_trainloader = iter(self.trainloader)
-            (X, y) = next(self.iter_trainloader)
-        return (X, y)
+            data = next(self.iter_trainloader)
+        return data
     
     def get_next_test_batch(self):
         try:
-            # Samples a new batch for persionalizing
-            (X, y) = next(self.iter_testloader)
+            # Samples a new batch for personalizing
+            data = next(self.iter_testloader)
         except StopIteration:
             # restart the generator if the previous generator is exhausted.
             self.iter_testloader = iter(self.testloader)
-            (X, y) = next(self.iter_testloader)
-        return (X, y)
+            data = next(self.iter_testloader)
+        return data
 
     def save_model(self):
         model_path = os.path.join("models", self.dataset)

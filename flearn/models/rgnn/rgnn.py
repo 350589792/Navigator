@@ -4,11 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from flearn.models.rgnn.configs_new import get_default_args
-
-# Get default configuration
-parser = get_default_args()
-args = parser.parse_args()
+from flearn.models.rgnn.configs_new import default_config as args
 
 
 class Attention(nn.Module):         #Attention模块的定义，用于在机器学习模型中进行注意力计算

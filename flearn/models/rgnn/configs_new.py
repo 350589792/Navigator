@@ -15,13 +15,15 @@ def get_default_args():
     return parser
 
 # Default configuration as a dictionary
-default_config = {
-    'batch_size': 512,
-    'train_num': 4096,
-    'device': 'cpu',
-    'hidden_dim': 128,
-    'alpha': 0.2,
-    'learning_rate': 1e-4,
-    'epochs': 500,
-    'path_model': './model/rgnn_10.pt'
-}
+class Config:
+    def __init__(self):
+        self.batch_size = 512
+        self.train_num = 4096
+        self.device = 'cpu'
+        self.hidden_dim = 128
+        self.alpha = 0.2
+        self.learning_rate = 1e-4
+        self.epochs = 500
+        self.path_model = './model/rgnn_10.pt'
+
+default_config = Config()
