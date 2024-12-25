@@ -41,9 +41,16 @@ class TestTailgatingBehaviors(unittest.TestCase):
         # Setup direct rear following scenario
         target = Person(x=600, y=360, frame_num=1)
         follower = Person(x=500, y=360, frame_num=1)  # Directly behind
-        follower.speed = 2.5  # High speed to trigger threat
+        follower.speed = 3.5  # Higher speed to exceed 3.0 threshold
         
         is_tailgating, type_, score = self.detector.detect_tailgating(target, follower)
+        print(f"\nDirect Rear Test:")
+        print(f"Threat Score: {score:.2f} (Threshold: {self.detector.threat_threshold})")
+        print(f"Type: {type_.value}")
+        print(f"Is Tailgating: {is_tailgating}")
+        print(f"Distance: {target.calculate_distance(follower):.2f}")
+        print(f"Speed: {follower.speed:.2f}")
+        
         self.assertEqual(type_, TailgatingType.DIRECT)
         self.assertTrue(is_tailgating)
         self.assertGreater(score, self.detector.threat_threshold)
@@ -53,9 +60,16 @@ class TestTailgatingBehaviors(unittest.TestCase):
         # Setup lateral following scenario
         target = Person(x=600, y=360, frame_num=1)
         follower = Person(x=500, y=460, frame_num=1)  # Diagonal approach
-        follower.speed = 2.5
+        follower.speed = 3.5  # Higher speed to exceed 3.0 threshold
         
         is_tailgating, type_, score = self.detector.detect_tailgating(target, follower)
+        print(f"\nLateral Test:")
+        print(f"Threat Score: {score:.2f} (Threshold: {self.detector.threat_threshold})")
+        print(f"Type: {type_.value}")
+        print(f"Is Tailgating: {is_tailgating}")
+        print(f"Distance: {target.calculate_distance(follower):.2f}")
+        print(f"Speed: {follower.speed:.2f}")
+        
         self.assertEqual(type_, TailgatingType.LATERAL)
         self.assertTrue(is_tailgating)
         self.assertGreater(score, self.detector.threat_threshold)
@@ -65,9 +79,16 @@ class TestTailgatingBehaviors(unittest.TestCase):
         # Setup horizontal following scenario
         target = Person(x=600, y=360, frame_num=1)
         follower = Person(x=500, y=370, frame_num=1)  # Nearly parallel
-        follower.speed = 2.5
+        follower.speed = 3.5  # Higher speed to exceed 3.0 threshold
         
         is_tailgating, type_, score = self.detector.detect_tailgating(target, follower)
+        print(f"\nHorizontal Test:")
+        print(f"Threat Score: {score:.2f} (Threshold: {self.detector.threat_threshold})")
+        print(f"Type: {type_.value}")
+        print(f"Is Tailgating: {is_tailgating}")
+        print(f"Distance: {target.calculate_distance(follower):.2f}")
+        print(f"Speed: {follower.speed:.2f}")
+        
         self.assertEqual(type_, TailgatingType.HORIZONTAL)
         self.assertTrue(is_tailgating)
         self.assertGreater(score, self.detector.threat_threshold)

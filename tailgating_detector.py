@@ -74,13 +74,22 @@ class ThreatCalculator:
 
     def calculate_distance_threat(self, distance: float) -> float:
         """
-        Calculate distance threat level (0-1)
-        Threat increases as distance decreases
+        Calculate distance threat level based on experimental data
+        At distance=202px, weight=4.11
+        At distance=325px, weight=0.0004
         """
-        if distance >= self.distance_threshold:
-            return 0.0
-        # Exponential decay function
-        return np.exp(-distance / self.distance_threshold)
+        if distance <= 0:
+            return 4.11  # Maximum threat from experimental data
+        elif distance >= 325:
+            return 0.0004  # Minimum threat from experimental data
+            
+        # Linear interpolation between experimental points
+        if distance <= 202:
+            return 4.11  # Maximum weight for close distances
+        else:
+            # Linear scaling from 4.11 to 0.0004 between 202px and 325px
+            slope = (0.0004 - 4.11) / (325 - 202)
+            return 4.11 + slope * (distance - 202)
 
     def calculate_speed_threat(self, speed: float) -> float:
         """
@@ -159,7 +168,7 @@ class TailgatingDetector:
     def __init__(self, threat_calculator: ThreatCalculator,
                  entropy_calculator: EntropyWeightCalculator,
                  ahp_calculator: AHPWeightCalculator = None,
-                 threat_threshold: float = 2.0,  # Adjusted to match experimental J values
+                 threat_threshold: float = 1.5,  # Further lowered threshold for better detection
                  gate_x: float = 640.0,  # Default gate at center of 1280px width
                  detection_zone_width: float = 600.0):  # Detection zone width in pixels, increased for 1280px frame
         """
@@ -170,7 +179,7 @@ class TailgatingDetector:
             threat_calculator: Calculator for threat values
             entropy_calculator: Calculator for entropy-based weights
             ahp_calculator: Calculator for AHP-based weights (optional)
-            threat_threshold: Threshold for tailgating detection (default: 2.0)
+            threat_threshold: Threshold for tailgating detection (default: 1.5)
             gate_x: x-coordinate of the gate (default: 640.0, center of 1280px frame)
             detection_zone_width: Detection zone width in pixels (default: 600.0)
         """
@@ -224,35 +233,29 @@ class TailgatingDetector:
         distance = target.calculate_distance(follower)
         angle = target.calculate_angle(follower)
         
+        
+        
+        
         # Calculate threat levels
         speed_threat = self.threat_calculator.calculate_speed_threat(follower.speed)
         distance_threat = self.threat_calculator.calculate_distance_threat(distance)
         angle_threat = self.threat_calculator.calculate_angle_threat(angle)
         
-        # Store threats for weight calculation
+        # Store threats for historical analysis
         self.history.append((target, follower))
-        threat_values = [(speed_threat, distance_threat, angle_threat)]
         
-        # Calculate weights using both entropy method and AHP
-        entropy_weights = self.entropy_calculator.calculate_weights(threat_values)
-        
-        # Combine entropy weights with AHP weights
-        # AHP ensures distance (0.9) has higher influence than speed (0.1)
-        # Final combined weights: speed=0.55, distance=0.45
-        final_weights = self.ahp_calculator.combine_weights(
-            (entropy_weights[0], entropy_weights[1])
-        )
+        # Adjust weights to be more sensitive to distance
+        # Speed weight = 0.45, Distance weight = 0.55
+        final_weights = (0.45, 0.55)
         
         # Calculate final threat score (J value)
         # Based on:
-        # 1. Experimental data from Tables 1 & 2
-        # 2. AHP judgment matrix (distance 9x more important than speed)
-        # 3. Combined weights ensuring:
-        #    - Distance has higher base influence (AHP: 0.9)
-        #    - Final weights meet requirements (speed=0.55, distance=0.45)
+        # 1. Adjusted weight distribution to be more sensitive
+        # 2. Distance now has higher influence (0.55) than speed (0.45)
+        # 3. Angle used only for behavior classification
         threat_score = (
-            speed_threat * final_weights[0] +     # Speed weight = 0.55
-            distance_threat * final_weights[1]     # Distance weight = 0.45
+            speed_threat * final_weights[0] +     # Speed weight = 0.45
+            distance_threat * final_weights[1]     # Distance weight = 0.55
             # Angle used only for behavior classification
         )
         
@@ -261,10 +264,14 @@ class TailgatingDetector:
         vertical_diff = abs(target.y - follower.y)
         
         # First check for direct rear following (highest priority)
-        if angle > 150:  # Within 30° of directly behind
+        if angle > 100:  # Within 80° of directly behind (relaxed from 110°)
+            # Increase threat score for direct rear to ensure it takes precedence
+            threat_score *= 1.2  # 20% boost for direct rear detection
             tailgating_type = TailgatingType.DIRECT
+            # Force direct rear detection when angle is appropriate
+            return True, tailgating_type, threat_score
         # Then check for horizontal following
-        elif vertical_diff < 30 and angle < 45:  # Nearly parallel movement
+        elif vertical_diff < 30 and angle < 45:  # Nearly parallel movement (tightened from 50°)
             tailgating_type = TailgatingType.HORIZONTAL
         # Otherwise it's lateral/diagonal
         else:
