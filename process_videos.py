@@ -12,6 +12,7 @@ class VideoProcessor:
         self.threat_calculator = ThreatCalculator()
         self.entropy_calculator = EntropyWeightCalculator()
         self.detector = TailgatingDetector(self.threat_calculator, self.entropy_calculator)
+        self.prev_gray = None  # Store previous grayscale frame for motion detection
         
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
@@ -28,10 +29,15 @@ class VideoProcessor:
         # Convert frame to grayscale for processing
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
+        # Handle first frame
+        if self.prev_gray is None:
+            self.prev_gray = gray
+            return [], frame  # No motion detection on first frame
+        
         # Apply background subtraction or motion detection
         motion_mask = cv2.absdiff(
             cv2.GaussianBlur(gray, (21, 21), 0),
-            cv2.GaussianBlur(gray, (21, 21), 0)
+            cv2.GaussianBlur(self.prev_gray, (21, 21), 0)
         )
         _, motion_mask = cv2.threshold(motion_mask, self.detector.motion_detection_threshold, 255, cv2.THRESH_BINARY)
         
@@ -47,6 +53,9 @@ class VideoProcessor:
                     cx = int(M["m10"] / M["m00"])
                     cy = int(M["m01"] / M["m00"])
                     people.append(Person(cx, cy, frame_num))
+        
+        # Update previous frame
+        self.prev_gray = gray
         
         return people, frame
 
