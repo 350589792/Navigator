@@ -39,20 +39,44 @@ class ThreatCalculator:
         }
     
     def calculate_distance_threat(self, distance: float) -> float:
-        """Calculate threat level based on distance"""
+        """Calculate threat level based on distance using binary classification:
+        - Level 1: Too close (threat = 1.0)
+        - Level 2: No risk (threat = 0.0)
+        """
         if distance <= 0:
             return 1.0
-        return min(1.0, self.distance_threshold / distance)
+        return 1.0 if distance < self.distance_threshold else 0.0
     
     def calculate_speed_threat(self, speed: float) -> float:
-        """Calculate threat level based on speed"""
+        """Calculate threat level based on speed using S-curve (logistic function):
+        threat = 1 / (1 + exp(-k * (speed - c)))
+        where:
+        - c is the inflection point (speed_threshold/2)
+        - k controls the steepness of the curve
+        """
+        import math
+
         if speed <= 0:
             return 0.0
-        return min(1.0, speed / self.speed_threshold)
+            
+        # Use speed_threshold/2 as inflection point
+        c = self.speed_threshold / 2.0
+        # k controls how quickly the function transitions (steepness)
+        k = 0.1
+        
+        # Calculate threat using logistic function
+        threat = 1.0 / (1.0 + math.exp(-k * (speed - c)))
+        return min(1.0, threat)
     
     def calculate_angle_threat(self, angle: float) -> float:
-        """Calculate threat level based on angle"""
-        return min(1.0, abs(180 - angle) / 180)
+        """Calculate threat level based on angle with quadratic emphasis:
+        - Maximum threat (1.0) at 180° (directly behind)
+        - Minimum threat (0.0) at 0° or 360° (directly ahead)
+        - Quadratic scaling to emphasize angles closer to 180°
+        """
+        # Normalize angle to [0, 180] range and square for emphasis
+        normalized = abs(180 - angle) / 180
+        return normalized * normalized
 
 class EntropyWeightCalculator:
     def calculate_weights(self, distance_threats: list, speed_threats: list, angle_threats: list) -> Tuple[float, float, float]:
@@ -122,10 +146,14 @@ class TailgatingDetector:
     def __init__(self, threat_calculator: ThreatCalculator, entropy_calculator: EntropyWeightCalculator):
         self.threat_calculator = threat_calculator
         self.entropy_calculator = entropy_calculator
+        from ahp_calculator import compute_ahp_weights  # Import AHP calculator
+        self.compute_ahp_weights = compute_ahp_weights
         self.contour_area_threshold = 600   # Reduced threshold to detect smaller human shapes (~24x24px)
         self.motion_detection_threshold = 30  # Reduced to improve detection of smaller movements
         self.min_speed_threshold = 1.0  # Minimum speed (pixels/frame) for tailgating detection
         self.tracked_pairs = {}  # Dictionary to track potential tailgating pairs
+        # Weight balance between entropy and AHP (0.5 means equal weight)
+        self.entropy_weight = 0.5
         
     def detect_tailgating(self, target: Person, follower: Person) -> Tuple[bool, Optional[TailgatingType], float]:
         """Detect if follower is tailgating target"""
@@ -158,12 +186,25 @@ class TailgatingDetector:
         speed_threat = self.threat_calculator.calculate_speed_threat(follower.speed)
         angle_threat = self.threat_calculator.calculate_angle_threat(angle)
         
-        # Calculate weights
-        weights = self.entropy_calculator.calculate_weights(
+        # Calculate entropy weights
+        entropy_weights = self.entropy_calculator.calculate_weights(
             [distance_threat], [speed_threat], [angle_threat]
         )
         
-        # Calculate final threat score
+        # Calculate AHP weights (with distance having highest importance)
+        ahp_weights = self.compute_ahp_weights(
+            distance_importance=5.0,  # Distance most important
+            speed_importance=3.0,     # Speed moderately important
+            angle_importance=1.0      # Angle least important
+        )
+        
+        # Combine weights using weighted average
+        weights = tuple(
+            self.entropy_weight * ew + (1 - self.entropy_weight) * aw
+            for ew, aw in zip(entropy_weights, ahp_weights)
+        )
+        
+        # Calculate final threat score using combined weights
         threat_score = (
             weights[0] * distance_threat +
             weights[1] * speed_threat +
