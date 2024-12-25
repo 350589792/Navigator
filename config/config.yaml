@@ -1,0 +1,56 @@
+# Data configuration
+data:
+  test_clean_path: "data/test/clean"
+  test_noisy_path: "data/test/noisy"
+  normalize: true
+
+# Model paths
+models:
+  proposed_path: "models/proposed/best_model.pth"
+  cnn_path: "models/cnn/best_model.pth"
+  bilstm_path: "models/bilstm/best_model.pth"
+  cnn_bilstm_path: "models/cnn_bilstm/best_model.pth"
+  msc_path: "models/msc/best_model.pth"
+  msc_bilstm_path: "models/msc_bilstm/best_model.pth"
+  msc_transformer_bilstm_path: "models/msc_transformer_bilstm/best_model.pth"
+
+# Model configuration
+model:
+  input_channels: 1
+  hidden_channels: 64  # Fixed size for all models
+  num_layers: 2  # Fixed number of layers
+  dropout: 0.2
+  params:
+    batch_size: 32
+    learning_rate: 0.001
+    lstm_hidden: 64  # Fixed size for BiLSTM models
+    lstm_layers: 2  # Match BiLSTM layers
+    transformer_dim: 64  # For transformer models
+    num_heads: 4  # For transformer models
+    transformer_ff_dim: 128  # For transformer models
+    dropout: 0.1
+  
+  # Loss function weights
+  loss_weights:
+    time: 1.0        # Primary reconstruction objective
+    spectral: 0.5    # Frequency domain consistency
+    perceptual: 0.8  # Feature-level similarity
+
+# Training configuration
+training:
+  seed: 42
+  device: "cuda"  # Options: cuda, cpu
+  num_workers: 4
+
+# Experiment configuration
+experiment:
+  report_dir: "reports/model_comparison"
+  metrics:
+    - mse
+    - mae
+    - snr
+    - psnr
+    - variance
+  visualization:
+    save_format: "png"
+    dpi: 300

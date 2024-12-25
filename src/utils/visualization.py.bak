@@ -1,0 +1,216 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import seaborn as sns
+from typing import Optional, Union, Dict
+from pathlib import Path
+import logging
+from scipy import signal
+
+logger = logging.getLogger(__name__)
+
+def ensure_numpy(x: Union[np.ndarray, torch.Tensor]) -> np.ndarray:
+    """Convert input to numpy array if it's a torch tensor."""
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+    return np.asarray(x)
+
+def plot_waveforms(original: Union[np.ndarray, torch.Tensor],
+                  noisy: Union[np.ndarray, torch.Tensor],
+                  denoised: Union[np.ndarray, torch.Tensor],
+                  title: str = "Signal Comparison",
+                  save_path: Optional[Union[str, Path]] = None):
+    """Plot original, noisy, and denoised waveforms.
+    
+    Args:
+        original: Original signal array
+        noisy: Noisy signal array
+        denoised: Denoised signal array
+        title: Plot title
+        save_path: Path to save the plot
+    """
+    original = ensure_numpy(original)
+    noisy = ensure_numpy(noisy)
+    denoised = ensure_numpy(denoised)
+    
+    plt.figure(figsize=(12, 8))
+    
+    plt.subplot(311)
+    plt.plot(original)
+    plt.title("Original Signal")
+    plt.grid(True)
+    plt.ylabel("Amplitude")
+    
+    plt.subplot(312)
+    plt.plot(noisy)
+    plt.title("Noisy Signal")
+    plt.grid(True)
+    plt.ylabel("Amplitude")
+    
+    plt.subplot(313)
+    plt.plot(denoised)
+    plt.title("Denoised Signal")
+    plt.grid(True)
+    plt.xlabel("Sample")
+    plt.ylabel("Amplitude")
+    
+    plt.tight_layout()
+    plt.suptitle(title)
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved waveform plot to {save_path}")
+    plt.close()
+    
+def plot_spectrograms(original: Union[np.ndarray, torch.Tensor],
+                     noisy: Union[np.ndarray, torch.Tensor],
+                     denoised: Union[np.ndarray, torch.Tensor],
+                     title: str = "Spectrogram Comparison",
+                     save_path: Optional[Union[str, Path]] = None,
+                     sample_rate: int = 1000):
+    """Plot spectrograms of original, noisy, and denoised signals.
+    
+    Args:
+        original: Original signal array
+        noisy: Noisy signal array
+        denoised: Denoised signal array
+        title: Plot title
+        save_path: Path to save the plot
+        sample_rate: Sampling rate in Hz
+    """
+    original = ensure_numpy(original)
+    noisy = ensure_numpy(noisy)
+    denoised = ensure_numpy(denoised)
+    
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+    
+    # Set spectrogram parameters
+    nperseg = 256  # Window length
+    noverlap = nperseg // 2  # Overlap between windows
+    
+    # Ensure signals are flattened
+    original = original.flatten()
+    noisy = noisy.flatten()
+    denoised = denoised.flatten()
+    
+    # Compute and plot spectrograms
+    f, t, Sxx = signal.spectrogram(original, fs=sample_rate, nperseg=nperseg, noverlap=noverlap)
+    ax1.pcolormesh(t, f, 10 * np.log10(Sxx + 1e-10), shading='gouraud')  # Add small constant to avoid log(0)
+    ax1.set_title("Original Spectrogram")
+    ax1.set_ylabel("Frequency [Hz]")
+    ax1.set_xlabel("Time [s]")
+    
+    f, t, Sxx = signal.spectrogram(noisy, fs=sample_rate, nperseg=nperseg, noverlap=noverlap)
+    ax2.pcolormesh(t, f, 10 * np.log10(Sxx + 1e-10), shading='gouraud')
+    ax2.set_title("Noisy Spectrogram")
+    ax2.set_ylabel("Frequency [Hz]")
+    ax2.set_xlabel("Time [s]")
+    
+    f, t, Sxx = signal.spectrogram(denoised, fs=sample_rate, nperseg=nperseg, noverlap=noverlap)
+    ax3.pcolormesh(t, f, 10 * np.log10(Sxx + 1e-10), shading='gouraud')
+    ax3.set_title("Denoised Spectrogram")
+    ax3.set_ylabel("Frequency [Hz]")
+    ax3.set_xlabel("Time [s]")
+    
+    plt.suptitle(title)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved spectrogram plot to {save_path}")
+    plt.close()
+    
+def plot_error_distribution(original: Union[np.ndarray, torch.Tensor],
+                          denoised: Union[np.ndarray, torch.Tensor],
+                          bins: int = 50,
+                          title: str = "Error Distribution",
+                          save_path: Optional[Union[str, Path]] = None):
+    """Plot error distribution histogram.
+    
+    Args:
+        original: Original signal array
+        denoised: Denoised signal array
+        bins: Number of histogram bins
+        title: Plot title
+        save_path: Path to save the plot
+    """
+    original = ensure_numpy(original)
+    denoised = ensure_numpy(denoised)
+    error = original - denoised
+    
+    plt.figure(figsize=(10, 6))
+    plt.hist(error, bins=bins, density=True, alpha=0.75)
+    plt.title(title)
+    plt.xlabel("Error")
+    plt.ylabel("Density")
+    plt.grid(True)
+    
+    # Add mean and std annotations
+    mean_err = np.mean(error)
+    std_err = np.std(error)
+    plt.axvline(mean_err, color='r', linestyle='--', label=f'Mean: {mean_err:.2e}')
+    plt.axvline(mean_err + std_err, color='g', linestyle=':', label=f'±1σ: {std_err:.2e}')
+    plt.axvline(mean_err - std_err, color='g', linestyle=':')
+    plt.legend()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved error distribution plot to {save_path}")
+    plt.close()
+
+def plot_ablation_comparison(baseline_results: Dict, ablation_results: Dict,
+                           save_path: Optional[str] = None):
+    """Plot comprehensive ablation study comparison.
+    
+    Args:
+        baseline_results: Results from baseline model
+        ablation_results: Results from ablation variants
+        save_path: Path to save the plot
+    """
+    metrics = ['mse', 'snr', 'psnr', 'error_variance', 'spectral_mse']
+    n_metrics = len(metrics)
+    
+    fig, axes = plt.subplots(n_metrics, 1, figsize=(15, 5*n_metrics))
+    
+    for idx, metric in enumerate(metrics):
+        ax = axes[idx]
+        models = []
+        values = []
+        
+        # Add baseline result
+        models.append('Full Model / 完整模型')
+        values.append(baseline_results['proposed']['metrics'][metric])
+        
+        # Add ablation results
+        for variant_name, result in ablation_results.items():
+            models.append(f"{variant_name} / 消融变体")
+            values.append(result['metrics'][metric])
+        
+        # Create bar plot
+        bars = ax.bar(models, values)
+        
+        # Color bars (full model in blue, ablations in red)
+        bars[0].set_color('blue')
+        for bar in bars[1:]:
+            bar.set_color('lightcoral')
+        
+        # Add value labels
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{height:.4f}',
+                   ha='center', va='bottom')
+        
+        # Customize plot
+        ax.set_title(f'{metric.upper()} Comparison / {metric}对比', fontsize=12)
+        ax.set_ylabel(metric.upper())
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+        ax.grid(True, alpha=0.3)
+    
+    plt.suptitle('Ablation Study Results / 消融实验结果', fontsize=14, y=1.02)
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Saved ablation comparison plot to {save_path}")
+    plt.close()
