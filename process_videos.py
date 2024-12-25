@@ -14,6 +14,12 @@ class VideoProcessor:
         self.detector = TailgatingDetector(self.threat_calculator, self.entropy_calculator)
         self.prev_gray = None  # Store previous grayscale frame for motion detection
         
+        # Define entry zones (x1, y1, x2, y2) for authorized entry points
+        self.entry_zones = {
+            "main": (500, 0, 780, 200),    # Main entry zone at top
+            "side": (1000, 300, 1280, 500) # Side entry zone
+        }
+        
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
         
@@ -146,14 +152,40 @@ class VideoProcessor:
             
             # Process frame and detect people
             people, processed_frame = self.process_frame(frame, frame_num)
-            print(f"Frame {frame_num}: Detected {len(people)} people")
             
-            # Update speeds based on previous positions
+            # Check for authorized entry
             for person in people:
+                for zone_name, (x1, y1, x2, y2) in self.entry_zones.items():
+                    if x1 <= person.x <= x2 and y1 <= person.y <= y2:
+                        person.is_authorized = True
+                        person.entry_zone = zone_name
+                        print(f"Frame {frame_num}: Authorized entry detected in {zone_name} zone")
+            
+            print(f"Frame {frame_num}: Detected {len(people)} people ({sum(p.is_authorized for p in people)} authorized)")
+            
+            # Update speeds based on previous positions with improved matching
+            MAX_MATCH_DISTANCE = 100  # Expanded matching radius
+            
+            # For each current person, find their best match in previous frame
+            for person in people:
+                best_match = None
+                min_distance = float('inf')
+                
+                # Find the closest previous person within MAX_MATCH_DISTANCE
                 for prev_person in prev_people:
-                    if abs(person.x - prev_person.x) < 50 and abs(person.y - prev_person.y) < 50:
-                        person.calculate_speed(prev_person, fps)
-                        print(f"Frame {frame_num}: Person speed: {person.speed:.2f} pixels/frame")
+                    dx = person.x - prev_person.x
+                    dy = person.y - prev_person.y
+                    distance = np.sqrt(dx*dx + dy*dy)
+                    
+                    if distance < MAX_MATCH_DISTANCE and distance < min_distance:
+                        min_distance = distance
+                        best_match = prev_person
+                
+                # Calculate speed only if we found a good match
+                if best_match is not None:
+                    person.calculate_speed(best_match, fps)
+                    print(f"Frame {frame_num}: Person at ({person.x:.1f}, {person.y:.1f}) matched to previous at " +
+                          f"({best_match.x:.1f}, {best_match.y:.1f}), distance={min_distance:.1f}, speed={person.speed:.2f} pixels/frame")
             
             # Detect and visualize tailgating
             processed_frame = self.detect_tailgating(people, processed_frame)

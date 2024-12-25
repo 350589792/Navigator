@@ -13,6 +13,8 @@ class Person:
         self.y = y
         self.frame_num = frame_num
         self.speed = 0.0
+        self.is_authorized = False  # Track authorization status
+        self.entry_zone = None  # Track which zone they entered through
         
     def calculate_speed(self, prev_person: 'Person', fps: float):
         """Calculate speed based on previous position and normalize to pixels per second"""
@@ -156,7 +158,10 @@ class TailgatingDetector:
         self.entropy_weight = 0.5
         
     def detect_tailgating(self, target: Person, follower: Person) -> Tuple[bool, Optional[TailgatingType], float]:
-        """Detect if follower is tailgating target"""
+        """Detect if follower is tailgating target. Skips check if follower is authorized."""
+        # Skip tailgating check if follower is authorized
+        if follower.is_authorized:
+            return False, None, 0.0
         print(f"Checking tailgating: Target({target.x:.1f}, {target.y:.1f}) -> Follower({follower.x:.1f}, {follower.y:.1f})")
         # Calculate distance
         dx = follower.x - target.x
