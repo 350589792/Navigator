@@ -223,12 +223,14 @@ class RGNN(torch.nn.Module):
         # Compute final attention weights for relay decisions
         attention_weights = F.softmax(u, dim=1)
         
+        # Ensure output shape matches target shape (B, city_size)
+        prob_dist = attention_weights[:, :self.city_size]
+        
         # Store relay decisions and environmental features as instance variables
-        self.relay_decisions = torch.argmax(attention_weights, dim=1)
+        self.relay_decisions = torch.argmax(prob_dist, dim=1)
         self.environmental_features = self.embedding_all(X_all)
         
-        # Return tuple format expected by FedUAVGNN
-        prob_dist = attention_weights
+        # Reshape context for latent features
         latent_features = context.view(self.batch_size, self.city_size, -1)
         
         return prob_dist, h, c, latent_features
