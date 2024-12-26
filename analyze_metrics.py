@@ -19,9 +19,11 @@ def analyze_network_metrics(network_type: str) -> Dict:
         return None
         
     with open(metrics_file, 'r') as f:
-        data = json.load(f)
+        scenarios = json.load(f)
         
-        # Extract metrics
+    metrics_by_scenario = {}
+    for scenario, data in scenarios.items():
+        # Extract metrics for each scenario
         train_losses = data.get('train_loss_history', [])
         train_accuracies = data.get('train_acc_history', [])
         test_losses = data.get('test_loss_history', [])
@@ -31,25 +33,27 @@ def analyze_network_metrics(network_type: str) -> Dict:
         convergence_rate = (train_losses[0] - train_losses[-1]) / len(train_losses) if len(train_losses) > 1 else 0
         
         # Convert communication overhead from bytes to MB
-        comm_overhead = sum(overhead / (1024 * 1024) for overhead in data.get('communication_overhead', []))
+        comm_overhead = data.get('total_communication_overhead', 0)
         
-        # Get training time
-        training_time = data.get('training_time', 0)
-        
-        return {
+        metrics_by_scenario[scenario] = {
+            'description': data.get('description', scenario),
             'convergence_rate': convergence_rate,
-            'final_train_accuracy': train_accuracies[-1] if train_accuracies else 0,
+            'final_accuracy': data.get('final_accuracy', 0),
             'final_test_accuracy': test_accuracies[-1] if test_accuracies else 0,
             'total_communication_overhead': comm_overhead,
-            'training_time': training_time,
+            'training_time': data.get('training_time', 0),
             'train_loss_history': train_losses,
             'train_acc_history': train_accuracies,
             'test_loss_history': test_losses,
             'test_acc_history': test_accuracies,
             'memory_usage': data.get('memory_usage', 0),
             'num_users': data.get('num_users', 0),
-            'num_uavs': data.get('num_uavs', 0)
+            'num_uavs': data.get('num_uavs', 0),
+            'use_relay': data.get('use_relay', False),
+            'use_resource_opt': data.get('use_resource_opt', False)
         }
+        
+    return metrics_by_scenario
 
 def plot_scenario_comparison(metrics_by_scenario: Dict, save_dir: str):
     """Plot comparison graphs for different scenarios with Chinese labels."""
@@ -116,143 +120,240 @@ def plot_metrics(small_metrics: Dict, medium_metrics: Dict, large_metrics: Dict)
     label_font = {'family': 'WenQuanYi Zen Hei', 'size': 12}
     legend_font = {'family': 'WenQuanYi Zen Hei', 'size': 10}
     
-    # Set up the main figure with 3x3 subplots
-    plt.figure(figsize=(20, 20))
+    scenarios = list(small_metrics.keys())
+    
+    # Create subplots for each metric type
+    fig = plt.figure(figsize=(25, 20))
     
     # 1. Training Loss Convergence (训练损失收敛)
     plt.subplot(3, 3, 1)
-    plt.plot(small_metrics['train_loss_history'], label=f'小型 ({small_metrics["num_users"]}用户, {small_metrics["num_uavs"]}UAV)')
-    plt.plot(medium_metrics['train_loss_history'], label=f'中型 ({medium_metrics["num_users"]}用户, {medium_metrics["num_uavs"]}UAV)')
-    plt.plot(large_metrics['train_loss_history'], label=f'大型 ({large_metrics["num_users"]}用户, {large_metrics["num_uavs"]}UAV)')
-    plt.title('训练损失收敛曲线')
-    plt.xlabel('训练轮次')
-    plt.ylabel('损失值')
-    plt.legend()
+    for scenario in scenarios:
+        s_metrics = small_metrics[scenario]
+        m_metrics = medium_metrics[scenario]
+        l_metrics = large_metrics[scenario]
+        
+        plt.plot(s_metrics['train_loss_history'], 
+                label=f'{scenario}-小型({s_metrics["num_users"]}用户)')
+        plt.plot(m_metrics['train_loss_history'], 
+                label=f'{scenario}-中型({m_metrics["num_users"]}用户)')
+        plt.plot(l_metrics['train_loss_history'], 
+                label=f'{scenario}-大型({l_metrics["num_users"]}用户)')
+    plt.title('训练损失收敛曲线', fontdict=title_font)
+    plt.xlabel('训练轮次', fontdict=label_font)
+    plt.ylabel('损失值', fontdict=label_font)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
     # 2. Test Loss Convergence (测试损失收敛)
     plt.subplot(3, 3, 2)
-    plt.plot(small_metrics['test_loss_history'], label=f'小型 ({small_metrics["num_users"]}用户, {small_metrics["num_uavs"]}UAV)')
-    plt.plot(medium_metrics['test_loss_history'], label=f'中型 ({medium_metrics["num_users"]}用户, {medium_metrics["num_uavs"]}UAV)')
-    plt.plot(large_metrics['test_loss_history'], label=f'大型 ({large_metrics["num_users"]}用户, {large_metrics["num_uavs"]}UAV)')
-    plt.title('测试损失收敛曲线')
-    plt.xlabel('训练轮次')
-    plt.ylabel('损失值')
-    plt.legend()
+    for scenario in scenarios:
+        s_metrics = small_metrics[scenario]
+        m_metrics = medium_metrics[scenario]
+        l_metrics = large_metrics[scenario]
+        
+        plt.plot(s_metrics['test_loss_history'], 
+                label=f'{scenario}-小型({s_metrics["num_users"]}用户)')
+        plt.plot(m_metrics['test_loss_history'], 
+                label=f'{scenario}-中型({m_metrics["num_users"]}用户)')
+        plt.plot(l_metrics['test_loss_history'], 
+                label=f'{scenario}-大型({l_metrics["num_users"]}用户)')
+    plt.title('测试损失收敛曲线', fontdict=title_font)
+    plt.xlabel('训练轮次', fontdict=label_font)
+    plt.ylabel('损失值', fontdict=label_font)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
     # 3. Training Accuracy (训练准确率)
     plt.subplot(3, 3, 3)
-    plt.plot(small_metrics['train_acc_history'], label=f'小型 ({small_metrics["num_users"]}用户, {small_metrics["num_uavs"]}UAV)')
-    plt.plot(medium_metrics['train_acc_history'], label=f'中型 ({medium_metrics["num_users"]}用户, {medium_metrics["num_uavs"]}UAV)')
-    plt.plot(large_metrics['train_acc_history'], label=f'大型 ({large_metrics["num_users"]}用户, {large_metrics["num_uavs"]}UAV)')
-    plt.title('训练准确率进展')
-    plt.xlabel('训练轮次')
-    plt.ylabel('准确率')
-    plt.legend()
+    for scenario in scenarios:
+        s_metrics = small_metrics[scenario]
+        m_metrics = medium_metrics[scenario]
+        l_metrics = large_metrics[scenario]
+        
+        plt.plot(s_metrics['train_acc_history'], 
+                label=f'{scenario}-小型({s_metrics["num_users"]}用户)')
+        plt.plot(m_metrics['train_acc_history'], 
+                label=f'{scenario}-中型({m_metrics["num_users"]}用户)')
+        plt.plot(l_metrics['train_acc_history'], 
+                label=f'{scenario}-大型({l_metrics["num_users"]}用户)')
+    plt.title('训练准确率进展', fontdict=title_font)
+    plt.xlabel('训练轮次', fontdict=label_font)
+    plt.ylabel('准确率', fontdict=label_font)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
-    # 4. Test Accuracy (测试准确率)
+    # 4. Communication Overhead by Scenario (通信开销对比)
     plt.subplot(3, 3, 4)
-    plt.plot(small_metrics['test_acc_history'], label=f'小型 ({small_metrics["num_users"]}用户, {small_metrics["num_uavs"]}UAV)')
-    plt.plot(medium_metrics['test_acc_history'], label=f'中型 ({medium_metrics["num_users"]}用户, {medium_metrics["num_uavs"]}UAV)')
-    plt.plot(large_metrics['test_acc_history'], label=f'大型 ({large_metrics["num_users"]}用户, {large_metrics["num_uavs"]}UAV)')
-    plt.title('测试准确率进展')
-    plt.xlabel('训练轮次')
-    plt.ylabel('准确率')
-    plt.legend()
+    x = np.arange(len(scenarios))
+    width = 0.25
+    
+    small_overhead = [small_metrics[s]['total_communication_overhead'] for s in scenarios]
+    medium_overhead = [medium_metrics[s]['total_communication_overhead'] for s in scenarios]
+    large_overhead = [large_metrics[s]['total_communication_overhead'] for s in scenarios]
+    
+    plt.bar(x - width, small_overhead, width, label='小型网络')
+    plt.bar(x, medium_overhead, width, label='中型网络')
+    plt.bar(x + width, large_overhead, width, label='大型网络')
+    
+    plt.title('各场景通信开销对比', fontdict=title_font)
+    plt.xlabel('场景', fontdict=label_font)
+    plt.ylabel('通信量 (MB)', fontdict=label_font)
+    plt.xticks(x, scenarios)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
-    # 5. Communication Overhead Over Time (通信开销随时间变化)
+    # 5. Training Time by Scenario (训练时间对比)
     plt.subplot(3, 3, 5)
-    networks = ['小型网络', '中型网络', '大型网络']
-    overhead = [small_metrics['total_communication_overhead'],
-                medium_metrics['total_communication_overhead'],
-                large_metrics['total_communication_overhead']]
-    plt.bar(networks, overhead)
-    plt.title('总通信开销')
-    plt.ylabel('通信量 (MB)')
+    small_time = [small_metrics[s]['training_time'] for s in scenarios]
+    medium_time = [medium_metrics[s]['training_time'] for s in scenarios]
+    large_time = [large_metrics[s]['training_time'] for s in scenarios]
+    
+    plt.bar(x - width, small_time, width, label='小型网络')
+    plt.bar(x, medium_time, width, label='中型网络')
+    plt.bar(x + width, large_time, width, label='大型网络')
+    
+    plt.title('各场景训练时间对比', fontdict=title_font)
+    plt.xlabel('场景', fontdict=label_font)
+    plt.ylabel('时间 (秒)', fontdict=label_font)
+    plt.xticks(x, scenarios)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
-    # 6. Resource Usage (资源使用)
+    # 6. Memory Usage by Scenario (内存使用对比)
     plt.subplot(3, 3, 6)
-    x = np.arange(len(networks))
-    width = 0.35
-    memory = [small_metrics['memory_usage'],
-              medium_metrics['memory_usage'],
-              large_metrics['memory_usage']]
-    times = [small_metrics['training_time'],
-             medium_metrics['training_time'],
-             large_metrics['training_time']]
+    small_mem = [small_metrics[s]['memory_usage'] for s in scenarios]
+    medium_mem = [medium_metrics[s]['memory_usage'] for s in scenarios]
+    large_mem = [large_metrics[s]['memory_usage'] for s in scenarios]
     
-    plt.bar(x - width/2, memory, width, label='内存使用 (MB)')
-    plt.bar(x + width/2, times, width, label='训练时间 (秒)')
-    plt.xticks(x, networks)
-    plt.title('资源使用情况')
-    plt.legend()
+    plt.bar(x - width, small_mem, width, label='小型网络')
+    plt.bar(x, medium_mem, width, label='中型网络')
+    plt.bar(x + width, large_mem, width, label='大型网络')
+    
+    plt.title('各场景内存使用对比', fontdict=title_font)
+    plt.xlabel('场景', fontdict=label_font)
+    plt.ylabel('内存使用 (MB)', fontdict=label_font)
+    plt.xticks(x, scenarios)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
-    # 7. Convergence Rate Comparison (收敛速率对比)
+    # 7. Convergence Rate by Scenario (收敛速率对比)
     plt.subplot(3, 3, 7)
-    conv_rates = [
-        (small_metrics['train_loss_history'][0] - small_metrics['train_loss_history'][-1]) / len(small_metrics['train_loss_history']),
-        (medium_metrics['train_loss_history'][0] - medium_metrics['train_loss_history'][-1]) / len(medium_metrics['train_loss_history']),
-        (large_metrics['train_loss_history'][0] - large_metrics['train_loss_history'][-1]) / len(large_metrics['train_loss_history'])
-    ]
-    plt.bar(networks, conv_rates)
-    plt.title('收敛速率对比')
-    plt.ylabel('每轮损失下降')
+    small_conv = [small_metrics[s]['convergence_rate'] for s in scenarios]
+    medium_conv = [medium_metrics[s]['convergence_rate'] for s in scenarios]
+    large_conv = [large_metrics[s]['convergence_rate'] for s in scenarios]
+    
+    plt.bar(x - width, small_conv, width, label='小型网络')
+    plt.bar(x, medium_conv, width, label='中型网络')
+    plt.bar(x + width, large_conv, width, label='大型网络')
+    
+    plt.title('各场景收敛速率对比', fontdict=title_font)
+    plt.xlabel('场景', fontdict=label_font)
+    plt.ylabel('每轮损失下降', fontdict=label_font)
+    plt.xticks(x, scenarios)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
-    # 8. Final Performance Comparison (最终性能对比)
+    # 8. Final Accuracy by Scenario (最终准确率对比)
     plt.subplot(3, 3, 8)
-    final_acc = [
-        small_metrics['test_acc_history'][-1],
-        medium_metrics['test_acc_history'][-1],
-        large_metrics['test_acc_history'][-1]
-    ]
-    plt.bar(networks, final_acc)
-    plt.title('最终测试准确率')
-    plt.ylabel('准确率')
+    small_acc = [small_metrics[s]['final_accuracy'] for s in scenarios]
+    medium_acc = [medium_metrics[s]['final_accuracy'] for s in scenarios]
+    large_acc = [large_metrics[s]['final_accuracy'] for s in scenarios]
+    
+    plt.bar(x - width, small_acc, width, label='小型网络')
+    plt.bar(x, medium_acc, width, label='中型网络')
+    plt.bar(x + width, large_acc, width, label='大型网络')
+    
+    plt.title('各场景最终准确率对比', fontdict=title_font)
+    plt.xlabel('场景', fontdict=label_font)
+    plt.ylabel('准确率', fontdict=label_font)
+    plt.xticks(x, scenarios)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
-    # 9. Efficiency Metrics (效率指标)
+    # 9. Training Efficiency by Scenario (训练效率对比)
     plt.subplot(3, 3, 9)
-    efficiency = [
-        small_metrics['test_acc_history'][-1] / small_metrics['training_time'],
-        medium_metrics['test_acc_history'][-1] / medium_metrics['training_time'],
-        large_metrics['test_acc_history'][-1] / large_metrics['training_time']
-    ]
-    plt.bar(networks, efficiency)
-    plt.title('训练效率')
-    plt.ylabel('准确率/训练时间')
+    small_eff = [small_metrics[s]['final_accuracy'] / small_metrics[s]['training_time'] 
+                 for s in scenarios]
+    medium_eff = [medium_metrics[s]['final_accuracy'] / medium_metrics[s]['training_time'] 
+                  for s in scenarios]
+    large_eff = [large_metrics[s]['final_accuracy'] / large_metrics[s]['training_time'] 
+                 for s in scenarios]
+    
+    plt.bar(x - width, small_eff, width, label='小型网络')
+    plt.bar(x, medium_eff, width, label='中型网络')
+    plt.bar(x + width, large_eff, width, label='大型网络')
+    
+    plt.title('各场景训练效率对比', fontdict=title_font)
+    plt.xlabel('场景', fontdict=label_font)
+    plt.ylabel('准确率/训练时间', fontdict=label_font)
+    plt.xticks(x, scenarios)
+    plt.legend(prop=legend_font)
     plt.grid(True)
     
     # Adjust layout and save
-    plt.suptitle('联邦学习性能指标综合分析', fontsize=16, y=0.95, fontfamily='WenQuanYi Zen Hei', fontweight='bold')
+    plt.suptitle('基于GNN的UAV联邦学习框架性能分析', fontsize=16, y=0.95, fontfamily='WenQuanYi Zen Hei', fontweight='bold')
     plt.tight_layout()
     plt.savefig('network_comparison.png', dpi=300, bbox_inches='tight')
+    
+    # Create additional plot for GNN-specific metrics
+    plt.figure(figsize=(15, 10))
+    
+    # Plot relay usage comparison
+    plt.subplot(2, 2, 1)
+    relay_usage = {
+        'small': sum(1 for s in scenarios if small_metrics[s]['use_relay']),
+        'medium': sum(1 for s in scenarios if medium_metrics[s]['use_relay']),
+        'large': sum(1 for s in scenarios if large_metrics[s]['use_relay'])
+    }
+    plt.bar(['小型网络', '中型网络', '大型网络'], 
+            [relay_usage['small'], relay_usage['medium'], relay_usage['large']])
+    plt.title('中继使用情况', fontdict=title_font)
+    plt.ylabel('使用中继的场景数', fontdict=label_font)
+    plt.grid(True)
+    
+    # Plot resource optimization usage
+    plt.subplot(2, 2, 2)
+    resource_opt = {
+        'small': sum(1 for s in scenarios if small_metrics[s]['use_resource_opt']),
+        'medium': sum(1 for s in scenarios if medium_metrics[s]['use_resource_opt']),
+        'large': sum(1 for s in scenarios if large_metrics[s]['use_resource_opt'])
+    }
+    plt.bar(['小型网络', '中型网络', '大型网络'], 
+            [resource_opt['small'], resource_opt['medium'], resource_opt['large']])
+    plt.title('资源优化使用情况', fontdict=title_font)
+    plt.ylabel('使用资源优化的场景数', fontdict=label_font)
+    plt.grid(True)
+    
+    plt.suptitle('GNN特征分析', fontsize=16, y=0.95, fontfamily='WenQuanYi Zen Hei', fontweight='bold')
+    plt.tight_layout()
+    plt.savefig('gnn_analysis.png', dpi=300, bbox_inches='tight')
 
 def main():
     network_types = ['small', 'medium', 'large']
     results = {}
     
-    print("=== UAV Network Federation Analysis ===\n")
+    print("=== UAV网络联邦学习分析报告 ===\n")
+    print("基于GNN的动态观测特征模型分析\n")
     
     for network_type in network_types:
-        metrics = analyze_network_metrics(network_type)
-        if metrics:
-            results[network_type] = metrics
-            print(f"\n=== {network_type.capitalize()} Network Configuration ===")
-            print(f"Network Size: {metrics['num_users']} users, {metrics['num_uavs']} UAVs")
-            print(f"Convergence Rate (Loss/round): {metrics['convergence_rate']:.6f}")
-            print(f"Final Training Accuracy: {metrics['final_train_accuracy']:.4f}")
-            print(f"Final Test Accuracy: {metrics['final_test_accuracy']:.4f}")
-            print(f"Total Communication Overhead: {metrics['total_communication_overhead']:.2f} MB")
-            print(f"Training Time: {metrics['training_time']:.3f}s")
-            print(f"Memory Usage: {metrics['memory_usage']:.2f} MB")
-            print("\nTraining Loss History:", [f"{loss:.6f}" for loss in metrics['train_loss_history'][:5]], "...")
-            print("Test Loss History:", [f"{loss:.6f}" for loss in metrics['test_loss_history'][:5]], "...")
+        metrics_by_scenario = analyze_network_metrics(network_type)
+        if metrics_by_scenario:
+            results[network_type] = metrics_by_scenario
+            print(f"\n=== {network_type.capitalize()} 网络配置 ===")
+            
+            for scenario, metrics in metrics_by_scenario.items():
+                print(f"\n--- 场景: {metrics['description']} ---")
+                print(f"网络规模: {metrics['num_users']} 用户, {metrics['num_uavs']} UAVs")
+                print(f"收敛速率 (每轮损失下降): {metrics['convergence_rate']:.6f}")
+                print(f"最终训练准确率: {metrics['final_accuracy']:.4f}")
+                print(f"最终测试准确率: {metrics['final_test_accuracy']:.4f}")
+                print(f"总通信开销: {metrics['total_communication_overhead']:.2f} MB")
+                print(f"训练时间: {metrics['training_time']:.3f}秒")
+                print(f"内存使用: {metrics['memory_usage']:.2f} MB")
+                print(f"中继使用: {'是' if metrics['use_relay'] else '否'}")
+                print(f"资源优化: {'是' if metrics['use_resource_opt'] else '否'}")
+                print("\n训练损失历史:", [f"{loss:.6f}" for loss in metrics['train_loss_history'][:5]], "...")
+                print("测试损失历史:", [f"{loss:.6f}" for loss in metrics['test_loss_history'][:5]], "...")
     
     if len(results) == 3:
         plot_metrics(results['small'], results['medium'], results['large'])
