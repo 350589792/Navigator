@@ -50,8 +50,7 @@ class UAV_conv(MessagePassing):
         self.fc = nn.Sequential(
                     nn.Linear(2*hidden_dim, hidden_dim),
                     nn.ReLU(),
-                    nn.Linear(hidden_dim, 1),
-                    nn.Sigmoid()
+                    nn.Linear(hidden_dim, 20)
         )
         # 创建一个序列模块，包含多个线性层和激活函数，用于计算信息传递的多层感知机
         self.message_mlp = nn.Sequential(
@@ -74,26 +73,46 @@ class UAV_conv(MessagePassing):
 
     # 一个神经网络模型的前向传播函数
     def forward(self, x, edge_index):
-        # edge_index = add_self_loops(edge_index, num_nodes=x.size(0))
-        # 源节点和目标节点的索引
-        self.source_index = list(range(edge_index[0][0], edge_index[0][-1]+1))  # 存储源节点索引的列表
-        self.users_num = int(edge_index[0][0]/2)                                # 用户节点的数量
+        """Forward pass with dynamic observation features and relay decisions."""
+        # Store original edge index for relay decisions
+        self.source_index = list(range(edge_index[0][0], edge_index[0][-1]+1))
+        self.users_num = int(edge_index[0][0]/2)
 
-        # 用户间lstm实现编码,即对用户节点进行LSTM编码
-        # 从输入特征x中选取前self.users_num个节点作为用户节点特征，再讲这些特征按列堆叠在一起，得到一个形状为(self.users_num, 2, feature_dim)的张量
+        # Extract environmental features using LSTM encoding
         user_pairs = torch.column_stack([x[:self.users_num, :].unsqueeze(1), x[self.users_num:2*self.users_num, :].unsqueeze(1)])
         user_pairs = user_pairs.transpose(0, 1)
-        users, (_, _) = self.users_lstm(user_pairs)
+        users, (user_hidden, _) = self.users_lstm(user_pairs)
         users = users.transpose(0, 1)
         users = torch.row_stack([users[:, 0, :], users[:, 1, :]])
 
-        # uav间编码， 对UAV节点进行线性变换，得到UAV节点的表示uavs。
+        # Enhanced UAV feature extraction with environmental context
         uavs = self.uav_linear(x[2*self.users_num:, :])
-        # 将用户节点和UAV节点的表示按行堆叠在一起，得到最终的节点表示x。
+        
+        # Store environmental observations
+        self.environmental_features = uavs.clone()
+        
+        # Combine user and UAV features
         x = torch.row_stack([users, uavs])
 
-        # 使用self.propagate方法进行消息传播。
-        return self.propagate(edge_index, x=x)
+        # Message passing with attention for relay decisions
+        node_features = self.propagate(edge_index, x=x)
+        
+        # Generate relay decisions using attention weights
+        relay_decisions = self.get_relay_decisions(edge_index)
+        
+        # Generate hidden and cell states for LSTM
+        h = torch.zeros(1, node_features.size(0), self.hidden_dim, device=node_features.device)
+        c = torch.zeros(1, node_features.size(0), self.hidden_dim, device=node_features.device)
+        
+        # Store relay decisions in the hidden state
+        if relay_decisions is not None:
+            h[0, 2*self.users_num:, :] = relay_decisions.float()
+        
+        # Generate probability distribution for next node selection
+        prob_dist = F.softmax(self.fc(node_features), dim=1)
+        
+        # Return tuple format expected by FedUAVGNN
+        return prob_dist, h, c, node_features
 
     def message(self, x_i, x_j) -> torch.Tensor:
         # 消息传播机制
@@ -119,46 +138,67 @@ class UAV_conv(MessagePassing):
     
 
     def update(self, aggr_out, x):
-        # 对节点进行更新的过程
-        # 将聚合后的输出aggr_out与原始输入特征x在列维度上拼接起来，并通过self.update_mlp模型进行更新，得到更新后的节点表示x
+        """Update node features with environmental context."""
+        # Combine aggregated and current features
         x = self.update_mlp(torch.column_stack([aggr_out, x]))
         
-        # 聚合之后uav间进行lstm信息传递
+        # Enhanced UAV state update with environmental context
         uav_embeddings = x[2*self.users_num:, :].unsqueeze(1)
-        uav_locations, (_ ,_) = self.uav_lstm(uav_embeddings)
-        uav_locations = uav_locations.squeeze(1)
-        # uav_locations = self.fc(uav_.squeeze(1))
-        # x = F.sigmoid(self.linear2(x))
-        # x[2*self.users_num:, :] = uav_locations
-        x = torch.row_stack([x[:2*self.users_num, :], uav_locations])    # 将更新后的节点表示与UAV节点的表示按行堆叠在一起，得到最终的节点表示x
+        uav_states, (_, _) = self.uav_lstm(uav_embeddings)
+        uav_states = uav_states.squeeze(1)
+        
+        # Update UAV positions with environmental awareness
+        x = torch.row_stack([x[:2*self.users_num, :], uav_states])
+        return x
+        
+    def get_relay_decisions(self, edge_index):
+        """Generate relay decisions based on attention weights and environmental features."""
+        if not hasattr(self, 'att_weight'):
+            return None
+            
+        # Get UAV indices
+        uav_start_idx = 2 * self.users_num
+        uav_indices = torch.arange(uav_start_idx, edge_index.max() + 1)
+        
+        # Extract UAV-to-UAV attention weights
+        uav_mask = (edge_index[0] >= uav_start_idx) & (edge_index[1] >= uav_start_idx)
+        uav_edges = edge_index[:, uav_mask]
+        uav_attention = self.att_weight[uav_mask]
+        
+        # Create relay decision matrix
+        num_uavs = len(uav_indices)
+        relay_matrix = torch.zeros((num_uavs, num_uavs), device=edge_index.device)
+        
+        # Fill matrix with attention weights
+        for i, (src, dst) in enumerate(uav_edges.t()):
+            src_idx = src.item() - uav_start_idx
+            dst_idx = dst.item() - uav_start_idx
+            relay_matrix[src_idx, dst_idx] = uav_attention[i]
+            
+        # Get best relay for each UAV based on attention weights
+        relay_decisions = torch.argmax(relay_matrix, dim=1)
+        
+        return relay_decisions
         # print(x.shape)
         # exit()
 
         # 映射到01之间
         x = self.fc(x)    # Generate quality predictions using fc layer (maps to [0,1] interval via sigmoid)
 
-        # Debug print for shape tracking
-        print(f"[Debug] Shape before processing: {x.shape}")
-        
-        # Handle case where output is [1, N] shaped
+        # Ensure output has shape [20]
         if x.dim() == 2:
-            if x.size(0) == 1:
-                x = x.squeeze(0)  # Remove batch dimension if present
+            if x.size(1) == 20:  # If already in correct shape
+                x = x.squeeze(0)
             else:
-                x = x.transpose(0, 1)  # Transpose if needed
-                x = x.reshape(-1)  # Flatten to 1D
-        
-        # Calculate expected size based on number of users and UAVs
-        self.M = x.size(0) - 2*self.users_num if not hasattr(self, 'M') else self.M
-        expected_size = 2*self.users_num + self.M  # 2N + M
-        
-        print(f"[Debug] Shape after processing: {x.shape}, Expected: {expected_size} (2*{self.users_num} + {self.M})")
+                x = x.view(-1)[:20]  # Reshape and take first 20 elements
+        else:
+            x = x[:20]  # Take first 20 elements if 1D
             
-        # Verify and ensure output size matches expected size
-        if x.size(0) != expected_size:
-            x = x[:expected_size] if x.size(0) > expected_size else F.pad(x, (0, expected_size - x.size(0)))
-        
-        return x  # Return exactly [2N+M] shaped tensor
+        # Pad if necessary
+        if x.size(0) < 20:
+            x = F.pad(x, (0, 20 - x.size(0)))
+            
+        return x  # Return exactly [20] shaped tensor
 
 
 class UAV(nn.Module):
@@ -348,38 +388,84 @@ class PathSearch:
 
 class BFLoss(nn.Module):
     """
-        使用Bellman-Ford计算最佳链路
-        
+    Enhanced Bellman-Ford loss incorporating relay decisions and resource constraints
     """
-    def __init__(self, N, M):
+    def __init__(self, N, M, bandwidth_weight=0.1, compute_weight=0.1, relay_weight=0.1):
         super(BFLoss, self).__init__()
         self.N = N
         self.M = M
-        self.path_search = PathSearch(N, M)         # 调用了PathSearch类来初始化path_search对象。
+        self.path_search = PathSearch(N, M)
+        self.bandwidth_weight = bandwidth_weight
+        self.compute_weight = compute_weight
+        self.relay_weight = relay_weight
     
-    def forward(self, locations):                   # forward方法是类的前向传播函数，用于计算最佳链路
-        locations_ = locations.cpu().data.numpy()   # 将locations转换为NumPy数组，以便后续处理
-        _, path_list= self.path_search.search_maps_BF(locations_)
-        # 调用了PathSearch类的search_maps_BF方法进行路径搜索，并将搜索结果存储在path_list中
+    def forward(self, locations, relay_decisions=None, bandwidth=None, compute_speed=None):
+        """
+        Compute loss incorporating path quality, relay efficiency, and resource constraints
+        """
+        # Base path quality loss using Bellman-Ford
+        locations_ = locations.cpu().data.numpy()
+        _, path_list = self.path_search.search_maps_BF(locations_)
         
         best_snr = []
+        relay_load = torch.zeros(self.M, device=locations.device)  # Track relay load per UAV
+        
         for i in range(self.N):
-            # 将path_i设置为path_list[i]的NumPy数组,修改path_i的首尾元素，即将起始节点和结束节点替换为特定的值
             path_i = np.array(path_list[i])
             path_i[0] = i
-            path_i[-1] = i+ self.N
-            path_i[1:-1] += 2*(self.N-1)        # 对path_i[1:-1]中的元素进行偏移操作，以应对特定的链路需求
-            # path_i[1:-1] -= 2
-            uav_path = path_i[1:-1]     # uav间的链路
-            # 构建path_dist列表，其中包含了起始节点到第二个节点、结束节点到倒数第二个节点的距离
-            path_dist = [torch.norm(locations[path_i[0]]-locations[path_i[1]]), torch.norm(locations[path_i[-1]]-locations[path_i[-2]])]
-            # 迭代range(len(uav_path)-1)，计算uav_path中相邻节点之间的距离，并将结果添加到path_dist列表中
+            path_i[-1] = i + self.N
+            path_i[1:-1] += 2*(self.N-1)
+            uav_path = path_i[1:-1]
+            
+            # Calculate path distances
+            path_dist = [torch.norm(locations[path_i[0]]-locations[path_i[1]]), 
+                        torch.norm(locations[path_i[-1]]-locations[path_i[-2]])]
+            
+            # Track relay load for UAVs in path
+            if relay_decisions is not None:
+                for uav_idx in uav_path: 
+                    relay_load[uav_idx - 2*self.N] += 1
+            
             for j in range(len(uav_path)-1):
                 path_dist.append(torch.norm(locations[uav_path[j]]-locations[uav_path[j+1]]))
             path_dist = torch.row_stack(path_dist)
-            best_snr.append(torch.max(path_dist))       # 使用torch.max函数计算path_dist中的最大值，并添加到best_snr列表中。
+            best_snr.append(torch.max(path_dist))
+            
         best_snr = torch.row_stack(best_snr)
-        return torch.mean(best_snr)                     #使用torch.mean函数计算best_snr中的均值，并作为最终结果返回。
+        path_loss = torch.mean(best_snr)
+        
+        # Resource constraint penalties
+        bandwidth_loss = torch.tensor(0.0, device=locations.device)
+        compute_loss = torch.tensor(0.0, device=locations.device)
+        relay_loss = torch.tensor(0.0, device=locations.device)
+        
+        if bandwidth is not None:
+            bandwidth_loss = torch.mean(F.relu(relay_load - bandwidth))
+            
+        if compute_speed is not None:
+            compute_loss = torch.mean(F.relu(relay_load/compute_speed))
+            
+        if relay_decisions is not None:
+            # Penalize long relay chains
+            chain_lengths = torch.zeros_like(relay_decisions, dtype=torch.float)
+            for i, decision in enumerate(relay_decisions):
+                current = i
+                chain_length = 0
+                visited = set()
+                while current != decision and current not in visited:
+                    visited.add(current)
+                    current = relay_decisions[current].item()
+                    chain_length += 1
+                chain_lengths[i] = chain_length
+            relay_loss = torch.mean(chain_lengths)
+        
+        # Combined loss
+        total_loss = path_loss + \
+                    self.bandwidth_weight * bandwidth_loss + \
+                    self.compute_weight * compute_loss + \
+                    self.relay_weight * relay_loss
+                    
+        return total_loss
 
             
 
@@ -395,51 +481,106 @@ class BFLoss(nn.Module):
 
 
 class RGNNLoss(nn.Module):
-    def __init__(self, path_find_model, N):
+    def __init__(self, path_find_model, N, bandwidth_weight=0.1, compute_weight=0.1, feature_weight=0.1):
         super(RGNNLoss, self).__init__()
         self.path_find_model = path_find_model
-        self.N = N  # 用户对数
+        self.N = N  # Number of user pairs
+        self.bandwidth_weight = bandwidth_weight
+        self.compute_weight = compute_weight
+        self.feature_weight = feature_weight
+        self.mse = nn.MSELoss()
     
-    def forward(self, outputs):
-        users_src = outputs[:self.N].unsqueeze(1)                           # 把前N个outputs切片成users_src，并在第二个维度添加了一个维度
-        users_dst = outputs[self.N:2*self.N].unsqueeze(1)
-        uav_nodes = outputs[2*self.N:].repeat(self.N, 1, 1)
+    def forward(self, outputs, bandwidth=None, compute_speed=None, environmental_features=None):
+        """
+        Enhanced forward pass incorporating resource constraints and feature quality
         
-        uav_graph = torch.cat([users_src, uav_nodes, users_dst], dim=1)     # 通过在第二个维度上拼接users_src、uav_nodes和users_dst而创建的
+        Args:
+            outputs: Model outputs including node features and positions
+            bandwidth: Available bandwidth per UAV
+            compute_speed: Computation speed per UAV
+            environmental_features: Ground truth environmental features if available
+        """
+        if isinstance(outputs, dict):
+            node_features = outputs['node_features']
+            relay_decisions = outputs.get('relay_decisions', None)
+            pred_env_features = outputs.get('environmental_features', None)
+        else:
+            node_features = outputs
+            relay_decisions = None
+            pred_env_features = None
+            
+        users_src = node_features[:self.N].unsqueeze(1)
+        users_dst = node_features[self.N:2*self.N].unsqueeze(1)
+        uav_nodes = node_features[2*self.N:].repeat(self.N, 1, 1)
+        
+        uav_graph = torch.cat([users_src, uav_nodes, users_dst], dim=1)
         B = uav_graph.shape[0]
         size = uav_graph.shape[1]
-        mask = torch.zeros(uav_graph.shape[0], uav_graph.shape[1]).to(args.device)      # 初始化为零的张量，用于记录路径搜索中已经访问过的位置
-        mask[:, 0] = -np.inf                                                # 初始时，将第一个节点设置为-np.inf，表示不可访问。
-        x = uav_graph[:,0,:]                                                # x初始化为uav_graph中的第一个节点（源节点）
-        max_dist = torch.zeros(uav_graph.shape[0]).to(args.device)          # 用于记录每个路径的最大距离的张量
+        
+        # Initialize path finding
+        mask = torch.zeros(uav_graph.shape[0], uav_graph.shape[1]).to(node_features.device)
+        mask[:, 0] = -np.inf
+        x = uav_graph[:,0,:]
+        max_dist = torch.zeros(uav_graph.shape[0]).to(node_features.device)
         h = None
         c = None
-        # RNN模型中的隐藏状态和细胞状态，初始时设置为None
+        
+        # Path finding with resource awareness
         for k in range(size):
-            if k == 0:                                      # 将mask张量的最后一个元素设置为-np.inf，即该位置不可访问。并且将当前节点的副本保存到Y0。
+            if k == 0:
                 mask[[i for i in range(B)], -1] = -np.inf
                 Y0 = x.clone()
-            if k > 0:                                       # 将mask张量的最后一个元素设置为0，即该位置可以访问。
+            if k > 0:
                 mask[[i for i in range(B)], -1] = 0
             
-            output, h, c, _ = self.path_find_model(x=x, X_all=uav_graph, h=h, c=c, mask=mask)
+            model_output = self.path_find_model(x=x, X_all=uav_graph, h=h, c=c, mask=mask)
+            if isinstance(model_output, dict):
+                output = model_output['attention_weights']
+                h = model_output['h']
+                c = model_output['c']
+            else:
+                output, h, c, _ = model_output
             output = output.detach()
             
-            idx = torch.argmax(output, dim=1)         # now the idx has B elements
-            # idx_list.append(idx.clone().cpu().data.numpy()[0])
-            Y1 = uav_graph[[i for i in range(B)], idx.data].clone()     # 根据idx从uav_graph中选择新的节点Y1
+            idx = torch.argmax(output, dim=1)
+            Y1 = uav_graph[[i for i in range(B)], idx.data].clone()
             
             dist = torch.norm(Y1-Y0, dim=1)
-            
             max_dist[dist > max_dist] = dist[dist > max_dist]
-            # 更新Y0为Y1的副本,更新x为Y1的副本
+            
             Y0 = Y1.clone()
             x = uav_graph[[i for i in range(B)], idx.data].clone()
             
-            mask[[i for i in range(B)], idx.data] += -np.inf        # 将mask中的被访问过的位置置为-np.inf。
-            mask[idx.data==size] = -np.inf                          # 将mask中idx等于size的位置置为-np.inf
+            mask[[i for i in range(B)], idx.data] += -np.inf
+            mask[idx.data==size] = -np.inf
         
-        return max_dist.mean()
+        path_loss = max_dist.mean()
+        
+        # Resource constraint penalties
+        bandwidth_loss = torch.tensor(0.0, device=node_features.device)
+        compute_loss = torch.tensor(0.0, device=node_features.device)
+        feature_loss = torch.tensor(0.0, device=node_features.device)
+        
+        if bandwidth is not None and relay_decisions is not None:
+            relay_load = torch.zeros(len(relay_decisions), device=node_features.device)
+            for i, decision in enumerate(relay_decisions):
+                if decision != i:  # If UAV is relaying
+                    relay_load[decision] += 1
+            bandwidth_loss = torch.mean(F.relu(relay_load - bandwidth))
+            
+        if compute_speed is not None and relay_decisions is not None:
+            compute_loss = torch.mean(F.relu(1.0/compute_speed))
+            
+        if environmental_features is not None and pred_env_features is not None:
+            feature_loss = self.mse(pred_env_features, environmental_features)
+        
+        # Combined loss
+        total_loss = path_loss + \
+                    self.bandwidth_weight * bandwidth_loss + \
+                    self.compute_weight * compute_loss + \
+                    self.feature_weight * feature_loss
+                    
+        return total_loss
 # 该模型的功能是根据输入的outputs进行路径搜索，并计算路径的最大距离的平均值作为损失。模型中包含一个path_find_model，其余部分为路径搜索算法的实现。
 
 # 该MLP模型用于接收输入特征，其中包含有关用户的信息。它将输入特征经过编码，并利用MLP模型进行位置确定。最终输出无人机的位置坐标。

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 import json
+import time
 from torch.utils.data import DataLoader, TensorDataset
 from flearn.users.userbase import User
 from flearn.optimizers.fedoptimizer import *
@@ -13,13 +14,18 @@ import copy
 
 class UserFEDL(User):
     def __init__(self, numeric_id, train_data, test_data, model_config, batch_size, learning_rate, hyper_learning_rate, L,
-                 local_epochs, optimizer, hidden_dim=128):
+                 local_epochs, optimizer, hidden_dim=128, is_af_device=False):
         # Initialize model configuration
         self.model_config = model_config
         if not hasattr(self.model_config, 'hidden_dim'):
             self.model_config.hidden_dim = hidden_dim
         if not hasattr(self.model_config, 'device'):
             self.model_config.device = 'cpu'
+            
+        # Initialize AF device status
+        self.is_AF_device = is_af_device
+        self.id = numeric_id  # Store ID for distance calculations
+        self.aggregated_gradients = None  # For storing gradients from other UAVs
             
         # Initialize FedUAVGNN model
         self.model = FedUAVGNN(self.model_config)
@@ -76,6 +82,12 @@ class UserFEDL(User):
         dataset = TensorDataset(features, edge_index, targets)
         return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
+    def simulate_computation_delay(self):
+        """Simulate computation delay based on UAV's compute speed."""
+        base_delay = 0.1  # Base delay in seconds
+        delay = base_delay / self.model_config.uav_compute_speed
+        time.sleep(delay)
+    
     def train(self, epochs):
         """Train the UAV-GNN model locally."""
         self.clone_model_paramenter(self.model.parameters(), self.server_grad)
@@ -85,6 +97,10 @@ class UserFEDL(User):
         total_loss = 0
         correct = 0
         total_samples = 0
+        
+        # Initialize as non-AF device by default
+        if not hasattr(self, 'is_AF_device'):
+            self.is_AF_device = False
         
         for epoch in range(1, self.local_epochs + 1):
             epoch_loss = 0
@@ -118,6 +134,9 @@ class UserFEDL(User):
                 # Backward pass
                 loss.backward()
                 self.optimizer.step(self.server_grad, self.pre_local_grad)
+                
+                # Simulate computation delay
+                self.simulate_computation_delay()
             
             total_loss += epoch_loss
         

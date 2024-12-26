@@ -16,9 +16,11 @@ from flearn.data.data_load_new import create_federated_data
 
 class FEDL(Server):
     def __init__(self, dataset, algorithm, model_config, batch_size, learning_rate, hyper_learning_rate, L, num_glob_iters,
-                 local_epochs, optimizer, num_users, rho, times, hidden_dim=128):
+                 local_epochs, optimizer, num_users, rho, times, hidden_dim=128, use_relay=True, use_resource_opt=False):
         # Store model configuration
         self.model_config = model_config
+        self.use_relay = use_relay
+        self.use_resource_opt = use_resource_opt
         
         # Initialize global GNN model with configuration
         self.global_model = FedUAVGNN(model_config)
@@ -58,13 +60,24 @@ class FEDL(Server):
             user_train_data = GNNDataset([features[i]], [edge_indices[i]], [targets[i]])
             user_test_data = GNNDataset([features[i]], [edge_indices[i]], [targets[i]])  # Using same data for testing
             
+            # Determine if this UAV should be an aggregator-forward device
+            # For medium/large networks: make every 3rd UAV an AF device
+            is_af = (total_users >= 5) and (i % 3 == 0)
+            
             # Initialize user with GNN model configuration
             user = UserFEDL(i, user_train_data, user_test_data, model_config, batch_size, learning_rate, 
-                           hyper_learning_rate, L, local_epochs, optimizer, hidden_dim)
+                           hyper_learning_rate, L, local_epochs, optimizer, hidden_dim, is_af_device=is_af)
+            
+            if is_af:
+                print(f"UAV {i} designated as Aggregator-Forward device")
+            
             self.users.append(user)
             self.total_train_samples += len(user_train_data)
             
+        # Count AF devices
+        af_count = sum(1 for user in self.users if user.is_AF_device)
         print(f"Number of UAVs / total UAVs: {num_users} / {total_users}")
+        print(f"Number of Aggregator-Forward UAVs: {af_count}")
         print("Finished creating FEDL server with UAV-GNN support.")
 
     def train(self):
@@ -112,7 +125,7 @@ class FEDL(Server):
         print(f"Total Training Time: {sum(self.training_times):.2f} seconds")
         
     def aggregate_parameters(self):
-        """Aggregate parameters from users with GNN-specific handling."""
+        """Aggregate parameters from users with support for aggregator-forward UAVs."""
         assert (len(self.users) > 0)
         
         # Initialize parameter dictionary
@@ -120,12 +133,52 @@ class FEDL(Server):
         for name, param in self.global_model.state_dict().items():
             param_state[name] = torch.zeros_like(param)
             
-        # Sum up parameters from all users
+        # First pass: Aggregate parameters at AF (Aggregator-Forward) UAVs
+        af_aggregated = OrderedDict()
+        af_samples = {}
+        
+        for user in self.selected_users:
+            if user.is_AF_device:
+                # Initialize aggregation state for this AF UAV
+                af_aggregated[user.id] = OrderedDict()
+                af_samples[user.id] = 0
+                for name, param in self.global_model.state_dict().items():
+                    af_aggregated[user.id][name] = torch.zeros_like(param)
+        
+        # Collect gradients at AF UAVs from nearby users
+        for user in self.selected_users:
+            if not user.is_AF_device:
+                # Find nearest AF UAV if relay is enabled
+                if self.use_relay:
+                    nearest_af = self._find_nearest_af_uav(user)
+                    if nearest_af is not None:
+                        af_samples[nearest_af.id] += user.train_samples
+                        for name, param in user.model.state_dict().items():
+                            af_aggregated[nearest_af.id][name] += param.data * user.train_samples
+                            
+                            # Apply resource optimization if enabled
+                            if self.use_resource_opt:
+                                # Scale parameters based on compute speed and bandwidth
+                                compute_factor = self.model_config.uav_compute_speed
+                                bandwidth_factor = self.model_config.uav_bandwidth / 10.0  # Normalize to baseline
+                                af_aggregated[nearest_af.id][name] *= (compute_factor * bandwidth_factor)
+        
+        # Second pass: Aggregate from AF UAVs to global model
         total_train = 0
         for user in self.selected_users:
-            total_train += user.train_samples
-            for name, param in user.model.state_dict().items():
-                param_state[name] += param.data * user.train_samples
+            if user.is_AF_device:
+                # Add AF's own parameters
+                total_train += user.train_samples + af_samples.get(user.id, 0)
+                for name, param in user.model.state_dict().items():
+                    # Combine AF's parameters with aggregated ones
+                    if user.id in af_aggregated:
+                        combined_param = (param.data * user.train_samples + af_aggregated[user.id][name])
+                        param_state[name] += combined_param
+            elif not self._has_nearby_af(user):
+                # Direct aggregation for users not near any AF UAV
+                total_train += user.train_samples
+                for name, param in user.model.state_dict().items():
+                    param_state[name] += param.data * user.train_samples
                 
         # Average parameters
         for name, param in self.global_model.state_dict().items():
@@ -133,6 +186,30 @@ class FEDL(Server):
             
         # Update global model
         self.global_model.load_state_dict(param_state, strict=True)
+        
+    def _find_nearest_af_uav(self, user):
+        """Find the nearest aggregator-forward UAV for a given user."""
+        nearest_af = None
+        min_distance = float('inf')
+        
+        for potential_af in self.selected_users:
+            if potential_af.is_AF_device:
+                distance = self._calculate_distance(user, potential_af)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_af = potential_af
+        
+        return nearest_af if min_distance <= self.model_config.max_relay_distance else None
+    
+    def _has_nearby_af(self, user):
+        """Check if user has a nearby aggregator-forward UAV."""
+        return self._find_nearest_af_uav(user) is not None
+    
+    def _calculate_distance(self, user1, user2):
+        """Calculate distance between two UAVs using their positions."""
+        # For now, using a simple Euclidean distance
+        # This should be updated to use actual UAV positions when available
+        return abs(user1.id - user2.id)  # Placeholder distance calculation
         
     def log_metrics(self, round_num):
         """Log training metrics for the current round."""
@@ -172,9 +249,14 @@ class FEDL(Server):
         self.rs_test_loss.append(test_loss)
         self.rs_test_acc.append(test_acc)
         
-        # Calculate communication overhead (model parameter size in bytes)
+        # Calculate communication overhead considering bandwidth
         param_size = sum(p.numel() for p in self.global_model.parameters()) * 4  # 4 bytes per float32
-        self.communication_overhead.append(param_size * len(self.selected_users) * 2)  # *2 for upload and download
+        total_data = param_size * len(self.selected_users) * 2  # *2 for upload and download
+        
+        # Convert bandwidth from Mbps to bytes per second and calculate overhead
+        bandwidth_bytes_per_sec = self.model_config.uav_bandwidth * 1024 * 1024 / 8  # Convert Mbps to bytes/sec
+        communication_time = total_data / bandwidth_bytes_per_sec
+        self.communication_overhead.append(total_data)
         
         # Store training time for this round
         if hasattr(self, 'round_start_time'):
@@ -192,9 +274,11 @@ class FEDL(Server):
         self.metrics_logger.log_training_metrics(
             round_num, train_loss, train_acc, test_loss, test_acc
         )
+        # Log communication metrics with time based on bandwidth
+        comm_time = self.communication_overhead[-1] / (self.model_config.uav_bandwidth * 1024 * 1024 / 8)
         self.metrics_logger.log_communication_metrics(
             round_num, self.communication_overhead[-1] / 1024 / 1024,  # Convert to MB
-            round_time if hasattr(self, 'round_start_time') else 0
+            comm_time  # Use calculated communication time
         )
         self.metrics_logger.log_resource_metrics(
             round_num,

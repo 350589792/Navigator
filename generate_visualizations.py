@@ -5,8 +5,9 @@ import os
 from pathlib import Path
 
 # Set Chinese font and style
-plt.rcParams['font.sans-serif'] = ['SimHei']  # Use SimHei for Chinese characters
+plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei']  # Use WenQuanYi Zen Hei font
 plt.rcParams['axes.unicode_minus'] = False    # Fix minus sign display
+plt.rcParams['font.family'] = 'sans-serif'    # Ensure we use the sans-serif font family
 # Set basic style parameters
 plt.rcParams['figure.facecolor'] = 'white'
 plt.rcParams['axes.facecolor'] = 'white'

@@ -73,6 +73,11 @@ def run_simulation(n_users, n_uavs, args):
             self.n_users_large = args.n_users_large
             self.n_uavs_large = args.n_uavs_large
             
+            # UAV Resource Configuration
+            self.uav_compute_speed = args.uav_compute_speed
+            self.uav_bandwidth = args.uav_bandwidth
+            self.max_relay_distance = args.max_relay_distance
+            
             # Additional parameters
             self.seed = args.seed
             self.eval_interval = args.eval_interval
@@ -80,23 +85,53 @@ def run_simulation(n_users, n_uavs, args):
     
     model_config = ModelConfig(args, n_users, n_uavs)
     
-    # Initialize server with configuration
-    server = FEDL(
-        dataset="uav_network",
-        algorithm="fedl",
-        model_config=model_config,
-        batch_size=model_config.batch_size,
-        learning_rate=model_config.learning_rate,
-        hyper_learning_rate=model_config.hyper_learning_rate,
-        L=model_config.L,
-        num_glob_iters=model_config.num_rounds,
-        local_epochs=model_config.local_epochs,
-        optimizer="fedl",
-        num_users=n_uavs,  # Use the actual number of UAVs
-        rho=1.0,
-        times=1,
-        hidden_dim=model_config.hidden_dim
-    )
+    # Define scenarios to run
+    scenarios = [
+        {
+            'name': 'direct',
+            'description': '直接传输 (Direct Transmission)',
+            'config': {'use_relay': False, 'use_resource_opt': False}
+        },
+        {
+            'name': 'resource_opt',
+            'description': '资源优化 (Resource Optimization)',
+            'config': {'use_relay': False, 'use_resource_opt': True}
+        },
+        {
+            'name': 'feduavgnn',
+            'description': 'FedUAVGNN',
+            'config': {'use_relay': True, 'use_resource_opt': True}
+        },
+        {
+            'name': 'bellman_ford',
+            'description': 'Bellman-Ford路径选择',
+            'config': {'use_relay': True, 'use_resource_opt': False}
+        }
+    ]
+    
+    all_metrics = {}
+    for scenario in scenarios:
+        logger.info(f"\nRunning scenario: {scenario['description']}")
+        
+        # Initialize server with scenario-specific configuration
+        server = FEDL(
+            dataset="uav_network",
+            algorithm="fedl",
+            model_config=model_config,
+            batch_size=model_config.batch_size,
+            learning_rate=model_config.learning_rate,
+            hyper_learning_rate=model_config.hyper_learning_rate,
+            L=model_config.L,
+            num_glob_iters=model_config.num_rounds,
+            local_epochs=model_config.local_epochs,
+            optimizer="fedl",
+            num_users=n_uavs,
+            rho=1.0,
+            times=1,
+            hidden_dim=model_config.hidden_dim,
+            use_relay=scenario['config']['use_relay'],
+            use_resource_opt=scenario['config']['use_resource_opt']
+        )
     
     # Record start time and initial resource usage
     start_time = time.time()
@@ -110,6 +145,8 @@ def run_simulation(n_users, n_uavs, args):
     final_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
     
     metrics = {
+        'scenario': scenario['name'],
+        'description': scenario['description'],
         'training_time': total_time,
         'memory_usage': final_memory - initial_memory,
         'num_users': n_users,
@@ -122,10 +159,16 @@ def run_simulation(n_users, n_uavs, args):
         'training_times': server.training_times,
         'final_loss': server.rs_train_loss[-1] if server.rs_train_loss else None,
         'final_accuracy': server.rs_train_acc[-1] if server.rs_train_acc else None,
-        'convergence_round': len(server.rs_train_loss) if server.rs_train_loss else None
+        'convergence_round': len(server.rs_train_loss) if server.rs_train_loss else None,
+        'use_relay': scenario['config']['use_relay'],
+        'use_resource_opt': scenario['config']['use_resource_opt'],
+        'total_communication_overhead': sum(server.communication_overhead) / (1024 * 1024) if server.communication_overhead else 0  # Convert to MB
     }
     
-    return metrics
+    # Store metrics for this scenario
+    all_metrics[scenario['name']] = metrics
+    
+    return all_metrics
 
 def plot_results(results, save_dir):
     """Plot and save simulation results."""
@@ -229,9 +272,27 @@ def main():
         logging.info(f"\nRunning simulation for {size} network:")
         logging.info(f"Users: {n_users}, UAVs: {n_uavs}")
         
-        # Run simulation and collect metrics
+        # Run simulation and collect metrics for all scenarios
         metrics = run_simulation(n_users, n_uavs, args)
-        results[f"{size}_{n_uavs}"] = metrics
+        
+        # Save scenario metrics
+        scenario_metrics = {}
+        for scenario_name, scenario_data in metrics.items():
+            scenario_dir = os.path.join(network_dir, f'scenario_{scenario_name}')
+            os.makedirs(scenario_dir, exist_ok=True)
+            
+            # Save metrics to JSON
+            metrics_file = os.path.join(scenario_dir, 'metrics.json')
+            with open(metrics_file, 'w') as f:
+                json.dump(scenario_data, f, indent=4)
+            
+            scenario_metrics[scenario_name] = scenario_data
+            
+        # Generate scenario comparison plots
+        from analyze_metrics import plot_scenario_comparison
+        plot_scenario_comparison(scenario_metrics, network_dir)
+        
+        results[f"{size}_{n_uavs}"] = scenario_metrics
         
         # Plot training history
         plt.figure(figsize=(15, 10))

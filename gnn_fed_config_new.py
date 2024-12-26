@@ -12,6 +12,11 @@ def get_default_args():
     parser.add_argument('--n_users_large', type=int, default=50, help='Number of users for large network')
     parser.add_argument('--n_uavs_large', type=int, default=10, help='Number of UAVs for large network')
     
+    # UAV Resource Configuration
+    parser.add_argument('--uav_compute_speed', type=float, default=1.0, help='UAV computation speed factor (relative to baseline)')
+    parser.add_argument('--uav_bandwidth', type=float, default=10.0, help='UAV bandwidth capacity in Mbps')
+    parser.add_argument('--max_relay_distance', type=float, default=100.0, help='Maximum distance for UAV relay communication')
+    
     # GNN Model Parameters
     parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension size')
     parser.add_argument('--alpha', type=float, default=0.2, help='Alpha parameter for attention')
@@ -49,6 +54,9 @@ default_config = {
     'n_uavs_medium': 5,
     'n_users_large': 50,
     'n_uavs_large': 10,
+    'uav_compute_speed': 1.0,
+    'uav_bandwidth': 10.0,
+    'max_relay_distance': 100.0,
     'hidden_dim': 128,
     'alpha': 0.2,
     'learning_rate': 1e-4,
