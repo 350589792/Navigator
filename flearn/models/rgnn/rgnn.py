@@ -220,4 +220,15 @@ class RGNN(torch.nn.Module):
 
         if latent is not None:
             u += self.alpha * latent   #如果潜在指针向量latent不为空，则将其加权并添加到u中
-        return F.softmax(u, dim=1), h, c, latent_u
+        # Compute final attention weights for relay decisions
+        attention_weights = F.softmax(u, dim=1)
+        
+        # Store relay decisions and environmental features as instance variables
+        self.relay_decisions = torch.argmax(attention_weights, dim=1)
+        self.environmental_features = self.embedding_all(X_all)
+        
+        # Return tuple format expected by FedUAVGNN
+        prob_dist = attention_weights
+        latent_features = context.view(self.batch_size, self.city_size, -1)
+        
+        return prob_dist, h, c, latent_features

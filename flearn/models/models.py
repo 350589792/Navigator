@@ -125,5 +125,11 @@ class FedUAVGNN(nn.Module):
         # Process through RGNN
         prob_dist, h, c, latent = self.gnn_core(x_current, X_all, mask)
         
-        # Return all values for proper state tracking in federated learning
+        # Process through RGNN and get the tuple output
+        prob_dist, h, c, latent = self.gnn_core(x_current, X_all, mask)
+        
+        # Access relay decisions and environmental features from RGNN
+        self.relay_decisions = self.gnn_core.relay_decisions
+        self.environmental_features = self.gnn_core.environmental_features
+        
         return prob_dist, h, c, latent
