@@ -56,11 +56,14 @@ class VideoProcessor:
         # Filter contours by area and create Person objects
         people = []
         for contour in contours:
-            if cv2.contourArea(contour) > self.detector.contour_area_threshold:
+            area = cv2.contourArea(contour)
+            print(f"Found contour with area: {area}")
+            if area > self.detector.contour_area_threshold:
                 M = cv2.moments(contour)
                 if M["m00"] != 0:
                     cx = int(M["m10"] / M["m00"])
                     cy = int(M["m01"] / M["m00"])
+                    print(f"Creating person at ({cx}, {cy}) with area {area}")
                     people.append(Person(cx, cy, frame_num))
                     # Draw contour and center point for visualization
                     cv2.drawContours(processed_frame, [contour], -1, (0, 255, 255), 2)  # Yellow contour
