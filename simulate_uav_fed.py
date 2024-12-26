@@ -175,19 +175,30 @@ def plot_results(results, save_dir):
     os.makedirs(save_dir, exist_ok=True)
     
     # Prepare data for plotting
-    uav_counts = sorted(results.keys())
-    metrics = ['training_time', 'communication_overhead', 'final_loss', 'convergence_round']
+    scenarios = sorted(results.keys())
+    network_sizes = sorted(list(results[scenarios[0]].keys()))
+    metrics = {
+        'total_time': 'training_time',
+        'total_overhead': 'total_communication_overhead',
+        'final_loss': 'final_loss',
+        'final_accuracy': 'final_accuracy'
+    }
     
     # Create plots
-    for metric in metrics:
-        plt.figure(figsize=(10, 6))
-        values = [results[n][metric] for n in uav_counts]
-        plt.plot(uav_counts, values, 'o-')
-        plt.title(f'{metric.replace("_", " ").title()} vs Number of UAVs')
-        plt.xlabel('Number of UAVs')
-        plt.ylabel(metric.replace('_', ' ').title())
+    for metric_name, metric_key in metrics.items():
+        plt.figure(figsize=(12, 6))
+        for scenario in scenarios:
+            values = [results[scenario][size][metric_key] for size in network_sizes]
+            plt.plot(network_sizes, values, 'o-', label=results[scenario][network_sizes[0]]['description'])
+        
+        plt.title(f'{metric_name.replace("_", " ").title()} 对比', fontproperties='Noto Sans CJK JP')
+        plt.xlabel('网络规模', fontproperties='Noto Sans CJK JP')
+        plt.ylabel(metric_name.replace('_', ' ').title(), fontproperties='Noto Sans CJK JP')
+        plt.xticks(rotation=45)
+        plt.legend(prop={'family': 'Noto Sans CJK JP'})
         plt.grid(True)
-        plt.savefig(os.path.join(save_dir, f'{metric}.png'))
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, f'{metric_name}.png'))
         plt.close()
 
 def parse_arguments():
@@ -276,7 +287,6 @@ def main():
         metrics = run_simulation(n_users, n_uavs, args)
         
         # Save scenario metrics
-        scenario_metrics = {}
         for scenario_name, scenario_data in metrics.items():
             scenario_dir = os.path.join(network_dir, f'scenario_{scenario_name}')
             os.makedirs(scenario_dir, exist_ok=True)
@@ -286,56 +296,65 @@ def main():
             with open(metrics_file, 'w') as f:
                 json.dump(scenario_data, f, indent=4)
             
-            scenario_metrics[scenario_name] = scenario_data
+            # Store results by scenario for plotting
+            if scenario_name not in results:
+                results[scenario_name] = {}
+            results[scenario_name][f"{size}_{n_uavs}"] = scenario_data
             
         # Generate scenario comparison plots
         from analyze_metrics import plot_scenario_comparison
-        plot_scenario_comparison(scenario_metrics, network_dir)
+        plot_scenario_comparison(metrics, network_dir)
         
-        results[f"{size}_{n_uavs}"] = scenario_metrics
-        
-        # Plot training history
-        plt.figure(figsize=(15, 10))
-        
-        # Loss plot
-        plt.subplot(2, 2, 1)
-        plt.plot(metrics['train_loss_history'], label='Train')
-        plt.plot(metrics['test_loss_history'], label='Test')
-        plt.title(f'{size.title()} Network - Loss History')
-        plt.xlabel('Round')
-        plt.ylabel('Loss')
-        plt.legend()
-        plt.grid(True)
-        
-        # Accuracy plot
-        plt.subplot(2, 2, 2)
-        plt.plot(metrics['train_acc_history'], label='Train')
-        plt.plot(metrics['test_acc_history'], label='Test')
-        plt.title(f'{size.title()} Network - Accuracy History')
-        plt.xlabel('Round')
-        plt.ylabel('Accuracy')
-        plt.legend()
-        plt.grid(True)
-        
-        # Communication overhead plot
-        plt.subplot(2, 2, 3)
-        plt.plot(metrics['communication_overhead'])
-        plt.title(f'{size.title()} Network - Communication Overhead')
-        plt.xlabel('Round')
-        plt.ylabel('Bytes')
-        plt.grid(True)
-        
-        # Training time plot
-        plt.subplot(2, 2, 4)
-        plt.plot(metrics['training_times'])
-        plt.title(f'{size.title()} Network - Training Time')
-        plt.xlabel('Round')
-        plt.ylabel('Seconds')
-        plt.grid(True)
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(network_dir, 'training_history.png'))
-        plt.close()
+        # Plot training history for each scenario
+        for scenario_name, scenario_data in metrics.items():
+            scenario_dir = os.path.join(network_dir, f'scenario_{scenario_name}')
+            
+            # Plot loss history
+            plt.figure(figsize=(10, 6))
+            plt.plot(scenario_data['train_loss_history'], label='训练损失')
+            plt.plot(scenario_data['test_loss_history'], label='测试损失')
+            plt.title(f'{size.title()} 网络 - {scenario_data["description"]} - 损失历史', fontproperties='Noto Sans CJK JP')
+            plt.xlabel('轮次', fontproperties='Noto Sans CJK JP')
+            plt.ylabel('损失', fontproperties='Noto Sans CJK JP')
+            plt.legend(prop={'family': 'Noto Sans CJK JP'})
+            plt.grid(True)
+            plt.savefig(os.path.join(scenario_dir, 'loss_history.png'))
+            plt.close()
+
+            # Plot accuracy history
+            plt.figure(figsize=(10, 6))
+            plt.plot(scenario_data['train_acc_history'], label='训练准确率')
+            plt.plot(scenario_data['test_acc_history'], label='测试准确率')
+            plt.title(f'{size.title()} 网络 - {scenario_data["description"]} - 准确率历史', fontproperties='Noto Sans CJK JP')
+            plt.xlabel('轮次', fontproperties='Noto Sans CJK JP')
+            plt.ylabel('准确率', fontproperties='Noto Sans CJK JP')
+            plt.legend(prop={'family': 'Noto Sans CJK JP'})
+            plt.grid(True)
+            plt.savefig(os.path.join(scenario_dir, 'accuracy_history.png'))
+            plt.close()
+
+            # Plot combined metrics
+            plt.figure(figsize=(15, 10))
+            
+            # Communication overhead plot
+            plt.subplot(2, 1, 1)
+            plt.plot(scenario_data['communication_overhead'])
+            plt.title(f'{size.title()} 网络 - {scenario_data["description"]} - 通信开销', fontproperties='Noto Sans CJK JP')
+            plt.xlabel('轮次', fontproperties='Noto Sans CJK JP')
+            plt.ylabel('字节', fontproperties='Noto Sans CJK JP')
+            plt.grid(True)
+            
+            # Training time plot
+            plt.subplot(2, 1, 2)
+            plt.plot(scenario_data['training_times'])
+            plt.title(f'{size.title()} 网络 - {scenario_data["description"]} - 训练时间', fontproperties='Noto Sans CJK JP')
+            plt.xlabel('轮次', fontproperties='Noto Sans CJK JP')
+            plt.ylabel('秒', fontproperties='Noto Sans CJK JP')
+            plt.grid(True)
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(scenario_dir, 'performance_metrics.png'))
+            plt.close()
         
         # Save network metrics
         with open(os.path.join(network_dir, 'metrics.json'), 'w') as f:
