@@ -189,11 +189,32 @@ def prepare_dataset(
     Returns:
         Tuple of (train_loader, val_loader, test_loader)
     """
-    # Define transforms
+    # Define transforms with enhanced color augmentation
     train_transform = A.Compose([
+        # Geometric transforms
         A.RandomRotate90(p=0.5),
         A.HorizontalFlip(p=0.5),
+        
+        # Color and intensity transforms
         A.RandomBrightnessContrast(p=0.2),
+        A.HueSaturationValue(
+            hue_shift_limit=10,
+            sat_shift_limit=10,
+            val_shift_limit=10,
+            p=0.2
+        ),
+        A.RGBShift(
+            r_shift_limit=20,
+            g_shift_limit=20,
+            b_shift_limit=20,
+            p=0.2
+        ),
+        A.RandomGamma(
+            gamma_limit=(80, 120),
+            p=0.2
+        ),
+        
+        # Normalization (always applied)
         A.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225]
