@@ -4,8 +4,16 @@ import pandas as pd
 import numpy as np
 from PIL import Image
 import os
+import logging
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 from preprocess_images_v2 import ImagePreprocessor, extract_texture_features
 from utils.binning import create_class_bins
+
+# Configure logger
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
 
 class RGBDataset(Dataset):
     def __init__(self, image_paths, labels, preprocessor):
@@ -52,18 +60,24 @@ class RGBClassificationDataset(Dataset):
             transformed = self.preprocessor.transform(image=image)
             image = transformed['image']
         else:
-            image = torch.from_numpy(image.transpose(2, 0, 1)).float() / 255.0
+            # Default normalization if no transform
+            transform = A.Compose([
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensorV2()
+            ])
+            transformed = transform(image=image)
+            image = transformed['image']
         
         # Convert label to class index
         class_idx = torch.tensor(label, dtype=torch.long)
         
-        # Debug print for first few items
+        # Log debug info for first few items
         if idx < 5:
-            print(f"\nDebug __getitem__ idx={idx}:")
-            print(f"Image path: {img_path}")
-            print(f"Label: {label}")
-            print(f"Texture features shape: {texture_features.shape}")
-            print(f"Number of texture features: {len(texture_features)}")
+            logger.debug(f"Processing item {idx}:")
+            logger.debug(f"  Image path: {img_path}")
+            logger.debug(f"  Label: {label}")
+            logger.debug(f"  Texture features shape: {texture_features.shape}")
+            logger.debug(f"  Number of texture features: {len(texture_features)}")
         
         return image, class_idx, torch.tensor(texture_features, dtype=torch.float32)
 
@@ -87,10 +101,10 @@ def create_dataloaders(task='water_saving', batch_size=32, train_split=0.7, val_
     
     # Load and preprocess data
     excel_path = '/home/ubuntu/attachments/11.xlsx'
-    print(f"\nLoading Excel file from: {excel_path}")
+    logger.info(f"Loading Excel file from: {excel_path}")
     df = pd.read_excel(excel_path)
-    print(f"Initial DataFrame shape: {df.shape}")
-    print("Columns:", df.columns.tolist())
+    logger.info(f"Initial DataFrame shape: {df.shape}")
+    logger.info(f"Columns: {df.columns.tolist()}")
     
     # Clean data
     # Map task names to column names
@@ -207,36 +221,36 @@ def create_dataloaders(task='water_saving', batch_size=32, train_split=0.7, val_
         
         if matched_img_num is not None:
             img_name = str(float(matched_img_num))
-            if debug_count < 5:  # Print first 5 for debugging
-                print(f"Row {debug_count}:")
-                print(f"  Excel identifier: {excel_id}")
-                print(f"  Matched image number: {matched_img_num}")
-                print(f"  Using factor: {matched_img_num/excel_id:.2f}")
+            if debug_count < 5:  # Log first 5 rows
+                logger.debug(f"Row {debug_count}:")
+                logger.debug(f"  Excel identifier: {excel_id}")
+                logger.debug(f"  Matched image number: {matched_img_num}")
+                logger.debug(f"  Using factor: {matched_img_num/excel_id:.2f}")
             debug_count += 1
             valid_count += 1
         
         if matched_img_num is None and debug_count < 5:
-            print(f"Row {debug_count}:")
-            print(f"  Excel identifier: {excel_id}")
-            print(f"  No match found")
-            print(f"  Available keys (first 5): {list(image_name_to_path.keys())[:5]}")
+            logger.warning(f"Row {debug_count}:")
+            logger.warning(f"  Excel identifier: {excel_id}")
+            logger.warning(f"  No match found")
+            logger.warning(f"  Available keys (first 5): {list(image_name_to_path.keys())[:5]}")
             debug_count += 1
     
-    print(f"\nTotal valid matches found: {valid_count} out of {len(valid_df)} rows")
+    logger.info(f"Total valid matches found: {valid_count} out of {len(valid_df)} rows")
     
-    # Print details of unmatched rows for debugging
+    # Log details of unmatched rows
     if valid_count < len(valid_df):
-        print("\nUnmatched Excel IDs:")
+        logger.warning("Unmatched Excel IDs:")
         unmatched_count = 0
         for _, row in valid_df.iterrows():
             excel_id = float(row['Unnamed: 0'])
             matched_img_num = convert_excel_id_to_image_numbers(excel_id, image_name_to_path)
             if matched_img_num is None and unmatched_count < 5:
-                print(f"\nExcel ID: {excel_id}")
+                logger.warning(f"Excel ID: {excel_id}")
                 # Try core factors to show attempted matches
                 core_factors = [12.8, 13.4, 14.0, 14.6, 15.2, 15.8]
                 tried_numbers = [round(excel_id * factor) for factor in core_factors]
-                print(f"Tried numbers with core factors: {tried_numbers}")
+                logger.warning(f"Tried numbers with core factors: {tried_numbers}")
                 # Show available numbers in a similar range
                 min_num = min(tried_numbers)
                 max_num = max(tried_numbers)
@@ -244,7 +258,7 @@ def create_dataloaders(task='water_saving', batch_size=32, train_split=0.7, val_
                 for num in range(min_num - 10, max_num + 11):
                     if str(float(num)) in image_name_to_path:
                         nearby_available.append(num)
-                print(f"Available numbers in range: {sorted(nearby_available)[:10]}")
+                logger.warning(f"Available numbers in range: {sorted(nearby_available)[:10]}")
                 unmatched_count += 1
     
     # Reset loop to collect data
@@ -265,8 +279,8 @@ def create_dataloaders(task='water_saving', batch_size=32, train_split=0.7, val_
                     # Binning for irrigation (1459-1800)
                     bins = [0, 1550, 1600, 1650, 1700, float('inf')]
                 if len(valid_data) < 5:  # Debug print for first few samples
-                    print(f"\nUsing bins for {task}: {bins}")
-                    print(f"Value {label_value:.2f} -> Class {np.digitize(label_value, bins) - 1}")
+                    logger.debug(f"Using bins for {task}: {bins}")
+                    logger.debug(f"Value {label_value:.2f} -> Class {np.digitize(label_value, bins) - 1}")
                 final_label = np.digitize(label_value, bins) - 1  # 0-based class index
             else:
                 final_label = label_value
@@ -279,10 +293,10 @@ def create_dataloaders(task='water_saving', batch_size=32, train_split=0.7, val_
     if not valid_data:
         raise ValueError(f"No valid data found for task {task}")
     
-    print(f"\nCollected {len(valid_data)} valid samples")
-    print("First 5 samples:")
+    logger.info(f"Collected {len(valid_data)} valid samples")
+    logger.info("First 5 samples:")
     for i, data in enumerate(valid_data[:5]):
-        print(f"Sample {i+1}: Label = {data['label']}, Path = {data['path']}")
+        logger.info(f"Sample {i+1}: Label = {data['label']}, Path = {data['path']}")
     
     # Convert to numpy arrays
     image_paths = [d['path'] for d in valid_data]
@@ -310,23 +324,60 @@ def create_dataloaders(task='water_saving', batch_size=32, train_split=0.7, val_
         train_indices = indices[:train_size]
         val_indices = indices[train_size:train_size + val_size]
         test_indices = indices[train_size + val_size:]
-        print("\nTest set enabled with original train/val split maintained")
+        logger.info("Test set enabled with original train/val split maintained")
     
-    print(f"\nSplit sizes:")
-    print(f"Total samples: {len(indices)}")
-    print(f"Training samples: {len(train_indices)}")
-    print(f"Validation samples: {len(val_indices)}")
-    print(f"Test samples: {len(test_indices)}")
+    logger.info("Split sizes:")
+    logger.info(f"Total samples: {len(indices)}")
+    logger.info(f"Training samples: {len(train_indices)}")
+    logger.info(f"Validation samples: {len(val_indices)}")
+    logger.info(f"Test samples: {len(test_indices)}")
     
     # Analyze class distribution
     all_labels = [d['label'] for d in valid_data]
     unique_labels, counts = np.unique(all_labels, return_counts=True)
-    print("\nClass distribution in full dataset:")
+    logger.info("Class distribution in full dataset:")
     for label, count in zip(unique_labels, counts):
-        print(f"Class {label}: {count} samples ({count/len(all_labels)*100:.1f}%)")
+        logger.info(f"Class {label}: {count} samples ({count/len(all_labels)*100:.1f}%)")
     
-    # Create preprocessor
-    preprocessor = ImagePreprocessor()
+    # Define transforms
+    train_transform = A.Compose([
+        A.RandomRotate90(p=0.5),
+        A.HorizontalFlip(p=0.5),
+        A.RandomBrightnessContrast(p=0.2),
+        A.HueSaturationValue(
+            hue_shift_limit=10,
+            sat_shift_limit=10,
+            val_shift_limit=10,
+            p=0.2
+        ),
+        A.RGBShift(
+            r_shift_limit=20,
+            g_shift_limit=20,
+            b_shift_limit=20,
+            p=0.2
+        ),
+        A.RandomGamma(
+            gamma_limit=(80, 120),
+            p=0.2
+        ),
+        A.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        ),
+        ToTensorV2()
+    ])
+    
+    val_transform = A.Compose([
+        A.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        ),
+        ToTensorV2()
+    ])
+    
+    # Create preprocessors with appropriate transforms
+    train_preprocessor = ImagePreprocessor(transform=train_transform)
+    val_preprocessor = ImagePreprocessor(transform=val_transform)
     
     # Create datasets
     if task in ['water_saving_class', 'irrigation_class']:
@@ -334,29 +385,29 @@ def create_dataloaders(task='water_saving', batch_size=32, train_split=0.7, val_
         train_dataset = RGBClassificationDataset(
             [image_paths[i] for i in train_indices],
             [labels[i] for i in train_indices],
-            preprocessor
+            train_preprocessor
         )
         val_dataset = RGBClassificationDataset(
             [image_paths[i] for i in val_indices],
             [labels[i] for i in val_indices],
-            preprocessor
+            val_preprocessor
         )
     else:
         # For regression tasks
         train_dataset = RGBDataset(
             [image_paths[i] for i in train_indices],
             [labels[i] for i in train_indices],
-            preprocessor
+            train_preprocessor
         )
         val_dataset = RGBDataset(
             [image_paths[i] for i in val_indices],
             [labels[i] for i in val_indices],
-            preprocessor
+            val_preprocessor
         )
     
-    print(f"\nDataset sizes:")
-    print(f"Training dataset: {len(train_dataset)} samples")
-    print(f"Validation dataset: {len(val_dataset)} samples")
+    logger.info("Dataset sizes:")
+    logger.info(f"Training dataset: {len(train_dataset)} samples")
+    logger.info(f"Validation dataset: {len(val_dataset)} samples")
     
     # Create dataloaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

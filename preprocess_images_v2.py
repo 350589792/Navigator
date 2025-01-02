@@ -31,12 +31,13 @@ logger.setLevel(logging.INFO)  # Set to INFO by default
 
 class ImagePreprocessor:
     """Handles image preprocessing and feature extraction."""
-    def __init__(self):
-        self.transform = A.Compose([
-            A.Resize(198, 198),
-            A.Normalize(),
-            ToTensorV2()
-        ])
+    def __init__(self, transform=None):
+        """Initialize the preprocessor with optional transform.
+        
+        Args:
+            transform: Optional albumentations transform pipeline
+        """
+        self.transform = transform
     
     def process_image(self, image):
         """Process image and extract features.
@@ -240,12 +241,16 @@ def extract_texture_features(image: np.ndarray) -> np.ndarray:
     Returns:
         Array of texture features
     """
-    # Convert to grayscale for texture analysis
+    # Ensure uint8 type for proper texture analysis
+    if image.dtype != np.uint8:
+        image = (image * 255).astype(np.uint8)
+    
+    # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     
     # Calculate GLCM features
     glcm = cv2.resize(gray, (32, 32))  # Resize for consistent feature size
-    glcm = glcm.astype(np.float32) / 255.0  # Normalize
+    glcm = glcm.astype(np.uint8)  # Keep as uint8 for texture analysis
     
     # Extract various texture features (31 total):
     # - 5 statistical features
