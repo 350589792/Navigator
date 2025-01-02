@@ -9,6 +9,11 @@ import cv2
 from PIL import Image
 from typing import Tuple, Optional, Literal
 from utils.binning import ValueBinner
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class ImagePreprocessor:
     """Handles image preprocessing and feature extraction."""
@@ -179,6 +184,14 @@ class RGBDataset(Dataset):
         # Extract and validate texture features
         texture_features = extract_texture_features(image)
         texture_features = torch.tensor(texture_features, dtype=torch.float32)
+        
+        # Log debug information at debug level
+        logger.debug(f"Processing item {idx}:")
+        logger.debug(f"Image path: {img_path}")
+        logger.debug(f"Label: {item['water_saving']}")
+        logger.debug(f"Texture features shape: {texture_features.shape}")
+        logger.debug(f"Number of texture features: {len(texture_features)}")
+        
         if len(texture_features) != 31:
             raise ValueError(f"Expected 31 texture features, got {len(texture_features)}")
         
