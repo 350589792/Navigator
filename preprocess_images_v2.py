@@ -80,6 +80,8 @@ class RGBDataset(Dataset):
         self.img_dir = img_dir
         self.transform = transform
         self.classification = classification
+        self.logger = logging.getLogger(__name__)
+        self._first_batch_logged = False
         
         # Load Excel data
         df = pd.read_excel(excel_path)
@@ -199,18 +201,16 @@ class RGBDataset(Dataset):
         texture_features = extract_texture_features(image)
         texture_features = torch.tensor(texture_features, dtype=torch.float32)
         
-        # Only log first batch of first epoch for verification
-        if not hasattr(self, '_first_batch_logged'):
-            self._first_batch_logged = False
-            
+        # Only log first 5 samples once
         if not self._first_batch_logged and idx < 5:
-            logger.info(f"First batch sample {idx}:")
-            logger.info(f"Image path: {img_path}")
-            logger.info(f"Label: {item['water_saving']}")
-            logger.info(f"Texture features shape: {texture_features.shape}")
-            logger.info(f"Number of texture features: {len(texture_features)}")
+            self.logger.debug(f"Processing sample {idx}:")
+            self.logger.debug(f"Image path: {img_path}")
+            self.logger.debug(f"Label: {item['water_saving']}")
+            self.logger.debug(f"Texture features shape: {texture_features.shape}")
+            self.logger.debug(f"Number of texture features: {len(texture_features)}")
             if idx == 4:
                 self._first_batch_logged = True
+                self.logger.info("First 5 samples processed successfully")
         
         if len(texture_features) != 31:
             raise ValueError(f"Expected 31 texture features, got {len(texture_features)}")
