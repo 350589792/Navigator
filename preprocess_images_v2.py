@@ -11,9 +11,23 @@ from typing import Tuple, Optional, Literal
 from utils.binning import ValueBinner
 import logging
 
-# Set up logging
+# Set up logging with proper configuration
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+
+# Only add handler if none exist to prevent duplicate handlers
+if not logger.handlers:
+    # Create handlers
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # Create formatters and add it to handlers
+    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
+    console_handler.setFormatter(log_format)
+    
+    # Add handlers to the logger
+    logger.addHandler(console_handler)
+    
+logger.setLevel(logging.INFO)  # Set to INFO by default
 
 class ImagePreprocessor:
     """Handles image preprocessing and feature extraction."""
@@ -185,12 +199,13 @@ class RGBDataset(Dataset):
         texture_features = extract_texture_features(image)
         texture_features = torch.tensor(texture_features, dtype=torch.float32)
         
-        # Log debug information at debug level
-        logger.debug(f"Processing item {idx}:")
-        logger.debug(f"Image path: {img_path}")
-        logger.debug(f"Label: {item['water_saving']}")
-        logger.debug(f"Texture features shape: {texture_features.shape}")
-        logger.debug(f"Number of texture features: {len(texture_features)}")
+        # Log debug information only at trace level
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Processing item {idx}:")
+            logger.debug(f"Image path: {img_path}")
+            logger.debug(f"Label: {item['water_saving']}")
+            logger.debug(f"Texture features shape: {texture_features.shape}")
+            logger.debug(f"Number of texture features: {len(texture_features)}")
         
         if len(texture_features) != 31:
             raise ValueError(f"Expected 31 texture features, got {len(texture_features)}")
