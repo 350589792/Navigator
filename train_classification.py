@@ -7,14 +7,30 @@ timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 output_dir = f'outputs/classification_{timestamp}'
 os.makedirs(output_dir, exist_ok=True)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s: %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(output_dir, 'training.log')),
-        logging.StreamHandler()
-    ]
-)
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# Remove any existing handlers
+for handler in root_logger.handlers[:]:
+    root_logger.removeHandler(handler)
+
+# Create handlers
+file_handler = logging.FileHandler(os.path.join(output_dir, 'training.log'))
+console_handler = logging.StreamHandler()
+
+# Set handler levels
+file_handler.setLevel(logging.DEBUG)
+console_handler.setLevel(logging.INFO)
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s: %(message)s')
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Add handlers to root logger
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
 
 # Set specific logger levels
 logging.getLogger('preprocess_images_v2').setLevel(logging.INFO)
