@@ -6,7 +6,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Literal
 from utils.binning import ValueBinner
 
 class RGBDataset(Dataset):
@@ -38,37 +38,116 @@ class RGBDataset(Dataset):
         # Initialize binner if in classification mode
         self.binner = ValueBinner() if classification else None
         
+        # Initialize counters as instance variables
+        self.total_rows = 0
+        self.skipped_rows = 0
+        self.found_files = 0
+        
         # Process each row
-        for _, row in df.iterrows():
+        print("\nProcessing Excel rows for dataset creation...")
+        for idx, row in df.iterrows():
+            self.total_rows += 1
             water_saving = row['节水']
             irrigation = row['灌溉']
             
             # Skip if either value is NaN
             if pd.isna(water_saving) or pd.isna(irrigation):
+                self.skipped_rows += 1
+                print(f"Skipping row {idx}: NaN values found")
                 continue
+            
+            # Debug print for first few rows
+            idx_num = int(idx) if isinstance(idx, (int, np.integer)) else 0
+            if idx_num < 5:
+                print(f"\nProcessing row {idx}:")
+                print(f"Excel value: {row['Unnamed: 0']}")
+                print(f"Water saving: {water_saving}")
+                print(f"Irrigation: {irrigation}")
             
             # Convert to class labels if in classification mode
             if classification and self.binner is not None:
                 water_class = self.binner.transform_water(np.array([water_saving]))[0]
                 irr_class = self.binner.transform_irrigation(np.array([irrigation]))[0]
+                # Try matching against both water saving and irrigation values
+                img_name = None
+                idx_num = int(idx) if isinstance(idx, (int, np.integer)) else 0
+                
+                # Values to try matching against
+                values_to_try = [water_saving, irrigation]
+                if idx_num < 5:  # Debug print for first few rows
+                    print(f"Looking for image files with water_saving={water_saving}, irrigation={irrigation}")
+                
+                for val in values_to_try:
+                    for name_format in [f"{int(val)}的副本.jpg", f"{val:.2f}的副本.jpg"]:
+                        if idx_num < 5:  # Debug print for first few rows
+                            print(f"Trying filename: {name_format}")
+                        
+                        for class_dir in ['class1', 'class2', 'class3', 'class4', 'class5']:
+                            full_path = os.path.join('/home/ubuntu/attachments/img_xin', class_dir, name_format)
+                            if idx_num < 5:  # Debug print for first few rows
+                                print(f"Checking path: {full_path}")
+                            
+                            if os.path.exists(full_path):
+                                img_name = name_format
+                                self.found_files += 1
+                                if idx_num < 5:  # Debug print for first few rows
+                                    print(f"Found image at: {full_path}")
+                                break
+                        if img_name:
+                            break
+                    if img_name:
+                        break
+                if img_name is None:
+                    if idx_num < 5:  # Debug print for first few rows
+                        print(f"No matching image found for water_saving={water_saving}, irrigation={irrigation}")
+                    self.skipped_rows += 1
+                    continue  # Skip if no matching file found
+                
                 self.data.append({
-                    'img_name': f"{int(row['Unnamed: 0'])}.jpg",
+                    'img_name': img_name,
                     'water_saving': water_class,
                     'irrigation': irr_class
                 })
             else:
+                # Try matching against both water saving and irrigation values
+                img_name = None
+                # Values to try matching against
+                values_to_try = [water_saving, irrigation]
+                
+                for val in values_to_try:
+                    for name_format in [f"{int(val)}的副本.jpg", f"{val:.2f}的副本.jpg"]:
+                        for class_dir in ['class1', 'class2', 'class3', 'class4', 'class5']:
+                            if os.path.exists(os.path.join('/home/ubuntu/attachments/img_xin', class_dir, name_format)):
+                                img_name = name_format
+                                break
+                        if img_name:
+                            break
+                    if img_name:
+                        break
+                if img_name is None:
+                    continue  # Skip if no matching file found
+                
                 self.data.append({
-                    'img_name': f"{int(row['Unnamed: 0'])}.jpg",
+                    'img_name': img_name,
                     'water_saving': water_saving,
                     'irrigation': irrigation
                 })
     
     def __len__(self) -> int:
+        print(f"\nDataset statistics:")
+        print(f"Total rows processed: {self.total_rows}")
+        print(f"Rows skipped: {self.skipped_rows}")
+        print(f"Files found: {self.found_files}")
+        print(f"Final dataset size: {len(self.data)}")
         return len(self.data)
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         item = self.data[idx]
-        img_path = os.path.join(self.img_dir, item['img_name'])
+        # Images are organized in class subdirectories
+        for class_dir in ['class1', 'class2', 'class3', 'class4', 'class5']:
+            img_path = os.path.join('/home/ubuntu/attachments/img_xin', class_dir, item['img_name'])
+            if os.path.exists(img_path):
+                break
         
         # Read and process image
         image = cv2.imread(img_path)
@@ -168,10 +247,12 @@ def extract_texture_features(image: np.ndarray) -> np.ndarray:
     )
     from typing import Literal
     
-    def get_props(matrix, prop: Literal['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']):
+    def get_props(matrix, prop: Literal['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']) -> np.ndarray:
         return graycoprops(matrix, prop).ravel()[:2]
     
-    props = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']
+    props: list[Literal['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']] = [
+        'contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation'
+    ]
     for prop in props:
         features.extend(get_props(glcm_matrix, prop))
     

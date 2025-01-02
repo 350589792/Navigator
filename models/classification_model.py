@@ -11,8 +11,8 @@ class SingleTaskClassificationModel(nn.Module):
     def __init__(self, num_classes: int = 5, num_texture_features: int = 31):
         super().__init__()
         
-        # Load pre-trained ResNet18 with weights_only=True for security
-        resnet = models.resnet18(pretrained=True, weights_only=True)
+        # Load pre-trained ResNet18
+        resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
         self.features = nn.Sequential(*list(resnet.children())[:-1])
         
         # Texture feature processing
@@ -74,8 +74,8 @@ class RGBClassificationModel(nn.Module):
     def __init__(self, num_texture_features: int = 31):
         super().__init__()
         
-        # Load pre-trained ResNet18 with weights_only=True for security
-        resnet = models.resnet18(pretrained=True, weights_only=True)
+        # Load pre-trained ResNet18
+        resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
         self.features = nn.Sequential(*list(resnet.children())[:-1])
         
         # Texture feature processing
