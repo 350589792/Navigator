@@ -77,6 +77,11 @@ class RGBDataset(Dataset):
         # Extract texture features (31 features)
         texture_features = extract_texture_features(image)
         
+        # Log texture feature shape for verification
+        if idx == 0:  # Only log for first item to avoid spam
+            print(f"Texture features shape: {texture_features.shape}")
+            print(f"Number of texture features: {len(texture_features)}")
+        
         # Apply transforms
         if self.transform:
             transformed = self.transform(image=image)
