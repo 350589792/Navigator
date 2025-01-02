@@ -1,5 +1,31 @@
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Dict
+
+def create_class_bins(values: np.ndarray, task: str = 'water_saving') -> Dict[str, np.ndarray]:
+    """Create classification bins for the given task.
+    
+    Args:
+        values: Array of values to create bins for
+        task: Either 'water_saving' or 'irrigation'
+        
+    Returns:
+        Dict containing:
+            'bins': Array of bin boundaries
+            'labels': Array of class labels (0 to num_classes-1)
+    """
+    binner = ValueBinner(method='equal_width')
+    
+    if task == 'water_saving':
+        labels = binner.transform_water(values)
+        bins = binner.water_bins
+    else:
+        labels = binner.transform_irrigation(values)
+        bins = binner.irr_bins
+        
+    return {
+        'bins': bins,
+        'labels': labels
+    }
 
 def create_equal_width_bins(min_val: float, max_val: float, num_bins: int = 5) -> np.ndarray:
     """Create equal-width bins between min and max values."""
@@ -10,8 +36,32 @@ def create_percentile_bins(values: np.ndarray, num_bins: int = 5) -> np.ndarray:
     return np.percentile(values, np.linspace(0, 100, num_bins + 1))
 
 def assign_bin_labels(values: np.ndarray, bins: np.ndarray) -> np.ndarray:
-    """Assign bin labels (0 to num_bins-1) to values."""
-    return np.digitize(values, bins[1:]) - 1
+    """Assign bin labels (0 to num_bins-1) to values, ensuring valid class assignments.
+    
+    Args:
+        values: Array of values to bin
+        bins: Array of bin boundaries
+        
+    Returns:
+        np.ndarray: Array of bin labels (0 to num_classes-1)
+    """
+    num_classes = len(bins) - 1
+    values_clamped = np.clip(values, bins[0], bins[-1])
+    
+    # Initialize labels array
+    labels = np.zeros_like(values_clamped, dtype=int)
+    
+    # Assign labels based on bin boundaries
+    for i in range(num_classes):
+        if i == num_classes - 1:
+            # For the last bin, include the right boundary
+            mask = (values_clamped >= bins[i]) & (values_clamped <= bins[i + 1])
+        else:
+            # For other bins, exclude the right boundary
+            mask = (values_clamped >= bins[i]) & (values_clamped < bins[i + 1])
+        labels[mask] = i
+    
+    return labels
 
 class ValueBinner:
     def __init__(self, method: str = 'equal_width'):

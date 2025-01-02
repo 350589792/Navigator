@@ -73,10 +73,11 @@ class WaterSavingLoss(nn.Module):
         return water_norm * (self.water_max - self.water_min) + self.water_min
     
     def forward(self, water_pred, water_true):
-        # Normalize predictions (since model outputs raw values)
+        # Normalize both predictions and true values
         water_pred_norm = self.normalize(water_pred)
+        water_true_norm = self.normalize(water_true)
         
         # Calculate loss using normalized values
-        water_loss = self.mse(water_pred_norm, water_true)
+        water_loss = self.mse(water_pred_norm, water_true_norm)
         
         return water_loss

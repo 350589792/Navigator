@@ -15,7 +15,7 @@ class SingleTaskClassificationModel(nn.Module):
         resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
         self.features = nn.Sequential(*list(resnet.children())[:-1])
         
-        # Texture feature processing
+        # Texture feature processing (match input dimension of 31)
         self.texture_processor = nn.Sequential(
             nn.Linear(num_texture_features, 64),
             nn.ReLU(),
@@ -53,8 +53,23 @@ class SingleTaskClassificationModel(nn.Module):
         x = self.features(images)
         x = torch.flatten(x, 1)
         
-        # Process texture features
+        # Process texture features (ensure float32 dtype and proper shape)
+        texture_features = texture_features.to(dtype=torch.float32)
+        
+        # Handle single sample case (no batch dimension)
+        if texture_features.dim() == 1:
+            texture_features = texture_features.unsqueeze(0)
+        
+        # Handle case where batch dimension is second
+        if texture_features.dim() == 2 and texture_features.shape[1] != self.texture_processor[0].in_features:
+            texture_features = texture_features.t()
+        
+        # Process features through texture network
         texture_processed = self.texture_processor(texture_features)
+        
+        # Expand to match batch size if needed
+        if texture_processed.size(0) == 1 and x.size(0) > 1:
+            texture_processed = texture_processed.expand(x.size(0), -1)
         
         # Combine features
         combined = torch.cat([x, texture_processed], dim=1)
@@ -78,7 +93,7 @@ class RGBClassificationModel(nn.Module):
         resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
         self.features = nn.Sequential(*list(resnet.children())[:-1])
         
-        # Texture feature processing
+        # Texture feature processing (match input dimension of 31)
         self.texture_processor = nn.Sequential(
             nn.Linear(num_texture_features, 64),
             nn.ReLU(),
@@ -126,8 +141,31 @@ class RGBClassificationModel(nn.Module):
         x = self.features(images)
         x = torch.flatten(x, 1)
         
-        # Process texture features
+        # Process texture features (ensure float32 dtype and proper shape)
+        print(f"Initial texture_features shape: {texture_features.shape}")
+        print(f"Initial texture_features: {texture_features}")
+        
+        # Convert to float32
+        texture_features = texture_features.to(dtype=torch.float32)
+        
+        # Handle single sample case (no batch dimension)
+        if texture_features.dim() == 1:
+            texture_features = texture_features.unsqueeze(0)
+        
+        # Handle case where batch dimension is second
+        if texture_features.dim() == 2 and texture_features.shape[1] != self.texture_processor[0].in_features:
+            texture_features = texture_features.t()
+        
+        print(f"Reshaped texture_features shape: {texture_features.shape}")
+        
+        # Process features through texture network
         texture_processed = self.texture_processor(texture_features)
+        print(f"After texture_processor shape: {texture_processed.shape}")
+        
+        # Expand to match batch size if needed
+        if texture_processed.size(0) == 1 and x.size(0) > 1:
+            texture_processed = texture_processed.expand(x.size(0), -1)
+        print(f"Final texture_processed shape: {texture_processed.shape}")
         
         # Combine features
         combined = torch.cat([x, texture_processed], dim=1)

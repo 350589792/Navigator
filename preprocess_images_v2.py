@@ -6,8 +6,39 @@ from torch.utils.data import Dataset, DataLoader, random_split
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
+from PIL import Image
 from typing import Tuple, Optional, Literal
 from utils.binning import ValueBinner
+
+class ImagePreprocessor:
+    """Handles image preprocessing and feature extraction."""
+    def __init__(self):
+        self.transform = A.Compose([
+            A.Resize(198, 198),
+            A.Normalize(),
+            ToTensorV2()
+        ])
+    
+    def process_image(self, image):
+        """Process image and extract features.
+        
+        Args:
+            image: RGB image array
+            
+        Returns:
+            Tuple of (processed_image, texture_features)
+        """
+        # Apply transforms
+        if isinstance(image, Image.Image):
+            image = np.array(image)
+        
+        transformed = self.transform(image=image)
+        processed_image = transformed['image']
+        
+        # Extract texture features
+        texture_features = extract_texture_features(image)
+        
+        return processed_image, texture_features
 
 class RGBDataset(Dataset):
     """Dataset for RGB images with water saving and irrigation values."""
@@ -44,25 +75,14 @@ class RGBDataset(Dataset):
         self.found_files = 0
         
         # Process each row
-        print("\nProcessing Excel rows for dataset creation...")
         for idx, row in df.iterrows():
             self.total_rows += 1
             water_saving = row['节水']
             irrigation = row['灌溉']
             
-            # Skip if either value is NaN
             if pd.isna(water_saving) or pd.isna(irrigation):
                 self.skipped_rows += 1
-                print(f"Skipping row {idx}: NaN values found")
                 continue
-            
-            # Debug print for first few rows
-            idx_num = int(idx) if isinstance(idx, (int, np.integer)) else 0
-            if idx_num < 5:
-                print(f"\nProcessing row {idx}:")
-                print(f"Excel value: {row['Unnamed: 0']}")
-                print(f"Water saving: {water_saving}")
-                print(f"Irrigation: {irrigation}")
             
             # Convert to class labels if in classification mode
             if classification and self.binner is not None:
@@ -74,40 +94,31 @@ class RGBDataset(Dataset):
                 
                 # Values to try matching against
                 values_to_try = [water_saving, irrigation]
-                if idx_num < 5:  # Debug print for first few rows
-                    print(f"Looking for image files with water_saving={water_saving}, irrigation={irrigation}")
-                
                 for val in values_to_try:
                     for name_format in [f"{int(val)}的副本.jpg", f"{val:.2f}的副本.jpg"]:
-                        if idx_num < 5:  # Debug print for first few rows
-                            print(f"Trying filename: {name_format}")
-                        
                         for class_dir in ['class1', 'class2', 'class3', 'class4', 'class5']:
                             full_path = os.path.join('/home/ubuntu/attachments/img_xin', class_dir, name_format)
-                            if idx_num < 5:  # Debug print for first few rows
-                                print(f"Checking path: {full_path}")
-                            
                             if os.path.exists(full_path):
                                 img_name = name_format
                                 self.found_files += 1
-                                if idx_num < 5:  # Debug print for first few rows
-                                    print(f"Found image at: {full_path}")
                                 break
                         if img_name:
                             break
                     if img_name:
                         break
                 if img_name is None:
-                    if idx_num < 5:  # Debug print for first few rows
-                        print(f"No matching image found for water_saving={water_saving}, irrigation={irrigation}")
                     self.skipped_rows += 1
                     continue  # Skip if no matching file found
                 
-                self.data.append({
-                    'img_name': img_name,
-                    'water_saving': water_class,
-                    'irrigation': irr_class
-                })
+                # Only include data points where both classes are valid (0-4)
+                if 0 <= water_class <= 4 and 0 <= irr_class <= 4:
+                    self.data.append({
+                        'img_name': img_name,
+                        'water_saving': water_class,
+                        'irrigation': irr_class
+                    })
+                else:
+                    self.skipped_rows += 1
             else:
                 # Try matching against both water saving and irrigation values
                 img_name = None
@@ -134,32 +145,42 @@ class RGBDataset(Dataset):
                 })
     
     def __len__(self) -> int:
-        print(f"\nDataset statistics:")
-        print(f"Total rows processed: {self.total_rows}")
-        print(f"Rows skipped: {self.skipped_rows}")
-        print(f"Files found: {self.found_files}")
-        print(f"Final dataset size: {len(self.data)}")
         return len(self.data)
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Get a data item by index.
+        
+        Args:
+            idx: Index of the item to get
+            
+        Returns:
+            Tuple of (image, texture_features, water_saving, irrigation)
+        """
         item = self.data[idx]
-        # Images are organized in class subdirectories
+        
+        # Find image path in class subdirectories
+        img_path = None
         for class_dir in ['class1', 'class2', 'class3', 'class4', 'class5']:
-            img_path = os.path.join('/home/ubuntu/attachments/img_xin', class_dir, item['img_name'])
-            if os.path.exists(img_path):
+            path = os.path.join('/home/ubuntu/attachments/img_xin', class_dir, item['img_name'])
+            if os.path.exists(path):
+                img_path = path
                 break
+                
+        if img_path is None:
+            raise FileNotFoundError(f"Image not found: {item['img_name']}")
         
         # Read and process image
         image = cv2.imread(img_path)
+        if image is None:
+            raise ValueError(f"Failed to read image: {img_path}")
+            
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        # Extract texture features (31 features)
+        # Extract and validate texture features
         texture_features = extract_texture_features(image)
-        
-        # Log texture feature shape for verification
-        if idx == 0:  # Only log for first item to avoid spam
-            print(f"Texture features shape: {texture_features.shape}")
-            print(f"Number of texture features: {len(texture_features)}")
+        texture_features = torch.tensor(texture_features, dtype=torch.float32)
+        if len(texture_features) != 31:
+            raise ValueError(f"Expected 31 texture features, got {len(texture_features)}")
         
         # Apply transforms
         if self.transform:
@@ -176,8 +197,6 @@ class RGBDataset(Dataset):
         else:
             water_saving = water_saving.float()
             irrigation = irrigation.float()
-        
-        texture_features = torch.tensor(texture_features, dtype=torch.float32)
         
         return image, texture_features, water_saving, irrigation
 
@@ -197,7 +216,11 @@ def extract_texture_features(image: np.ndarray) -> np.ndarray:
     glcm = cv2.resize(gray, (32, 32))  # Resize for consistent feature size
     glcm = glcm.astype(np.float32) / 255.0  # Normalize
     
-    # Extract various texture features (31 total)
+    # Extract various texture features (31 total):
+    # - 5 statistical features
+    # - 8 gradient features
+    # - 6 LBP features
+    # - 12 Haralick features (6 properties × 2 angles)
     features = []
     
     # Basic statistical features (5)
@@ -224,20 +247,20 @@ def extract_texture_features(image: np.ndarray) -> np.ndarray:
         np.sum(mag > 0.1) / mag.size  # Edge density
     ])
     
-    # Local binary pattern features (8)
+    # Local binary pattern features (6)
     from skimage.feature import local_binary_pattern
     radius = 1
     n_points = 8
     lbp = local_binary_pattern(glcm, n_points, radius, method='uniform')
-    hist, _ = np.histogram(lbp.ravel(), bins=n_points + 2, range=(0, n_points + 2))
+    hist, _ = np.histogram(lbp.ravel(), bins=6, range=(0, n_points))  # Reduce to 6 bins
     hist = hist.astype("float")
     hist /= (hist.sum() + 1e-7)
     features.extend(hist)
     
-    # Haralick features (10)
+    # Haralick features (12)
     from skimage.feature import graycomatrix, graycoprops
     distances = [1]
-    angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+    angles = [0, np.pi/2]  # Only use 2 angles instead of 4
     glcm_matrix = graycomatrix(
         (glcm * 255).astype(np.uint8),
         distances,
@@ -247,14 +270,14 @@ def extract_texture_features(image: np.ndarray) -> np.ndarray:
     )
     from typing import Literal
     
-    def get_props(matrix, prop: Literal['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']) -> np.ndarray:
-        return graycoprops(matrix, prop).ravel()[:2]
+    def get_props(matrix, prop: Literal['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']) -> np.ndarray:
+        return graycoprops(matrix, prop).ravel()
     
-    props: list[Literal['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation']] = [
-        'contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation'
+    props: list[Literal['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']] = [
+        'contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM'
     ]
     for prop in props:
-        features.extend(get_props(glcm_matrix, prop))
+        features.extend(get_props(glcm_matrix, prop))  # 6 properties × 2 angles = 12 features
     
     return np.array(features, dtype=np.float32)
 

@@ -8,10 +8,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 import os
+import logging
 
-from models.classification_model import RGBClassificationModel
+from models.classification_model import SingleTaskClassificationModel
 from utils.binning import ValueBinner
-from preprocess_images_v2 import prepare_dataset
+from utils.create_dataloaders import create_dataloaders
 
 def train_classification_model(
     train_loader: DataLoader,
@@ -21,35 +22,8 @@ def train_classification_model(
     num_epochs: int,
     device: torch.device,
     output_dir: str
-) -> tuple[list[float], list[float], nn.Module, nn.Module]:
-    
-    # Calculate class weights from training data
-    water_labels = []
-    irr_labels = []
-    for _, _, water_label, irr_label in train_loader:
-        water_labels.extend(water_label.numpy())
-        irr_labels.extend(irr_label.numpy())
-    
-    from sklearn.utils.class_weight import compute_class_weight
-    water_weights = compute_class_weight(
-        class_weight='balanced',
-        classes=np.unique(water_labels),
-        y=water_labels
-    )
-    irr_weights = compute_class_weight(
-        class_weight='balanced',
-        classes=np.unique(irr_labels),
-        y=irr_labels
-    )
-    
-    # Set up weighted loss functions
-    water_criterion = nn.CrossEntropyLoss(
-        weight=torch.tensor(water_weights, dtype=torch.float32).to(device)
-    )
-    irr_criterion = nn.CrossEntropyLoss(
-        weight=torch.tensor(irr_weights, dtype=torch.float32).to(device)
-    )
-    """Train the classification model and save metrics.
+) -> tuple[list[float], list[float], nn.Module]:
+    """Train the classification model with proper metric tracking.
     
     Args:
         train_loader: Training data loader
@@ -58,30 +32,92 @@ def train_classification_model(
         optimizer: Optimizer
         num_epochs: Number of epochs to train
         device: Device to train on
-        output_dir: Directory to save metrics and plots
+        output_dir: Directory to save metrics
         
     Returns:
-        tuple[list[float], list[float], nn.Module, nn.Module]: 
-            Training losses, validation losses, water criterion, irrigation criterion
+        tuple[list[float], list[float], nn.Module]: Training losses, validation losses, criterion
     """
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s: %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(output_dir, 'training.log')),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Preparing training...")
+    
+    # Calculate class weights from training data
+    labels = []
+    for _, label_batch, _ in train_loader:
+        batch_labels = label_batch.numpy().flatten()
+        labels.extend(batch_labels.astype(int).tolist())
+    
+    from sklearn.utils.class_weight import compute_class_weight
+    
+    # Force all 5 classes (0-4)
+    all_classes = np.arange(5)
+    
+    # Ensure labels are in valid range and convert to integers
+    labels = np.clip(labels, 0, 4).astype(int)
+    
+    # Compute weights for all 5 classes silently
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=all_classes,
+        y=labels
+    )
+    
+    # Set up weighted loss function
+    criterion = nn.CrossEntropyLoss(
+        weight=torch.tensor(class_weights, dtype=torch.float32).to(device)
+    )
+    # Calculate class weights and set up loss function
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
+    patience = 5  # Early stopping patience
+    no_improve = 0
+    
+    logger.info("Starting training...")
+    logger.info(f"Training on device: {device}")
+    logger.info(f"Number of batches per epoch: {len(train_loader)}")
+    logger.info(f"Batch size: {train_loader.batch_size}")
+    logger.info(f"Total training samples: {len(train_loader.dataset)}")
     
     for epoch in range(num_epochs):
         # Training
         model.train()
         epoch_loss = 0.0
-        for images, texture_features, water_labels, irr_labels in train_loader:
-            images = images.to(device)
-            texture_features = texture_features.to(device)
-            water_labels = water_labels.to(device)
-            irr_labels = irr_labels.to(device)
+        error_count = 0
+        max_errors = 5  # Maximum number of errors before stopping epoch
+        
+        for batch_idx, (images, labels, texture_features) in enumerate(train_loader):
+            try:
+                images = images.to(device)
+                labels = labels.to(device)
+                texture_features = texture_features.to(device)
+                
+                # Log shapes once at the start of training
+                if epoch == 0 and batch_idx == 0:
+                    logger.info("Starting training with input shapes:")
+                    logger.info(f"Images: {images.shape}")
+                    logger.info(f"Labels: {labels.shape}")
+                    logger.info(f"Texture features: {texture_features.shape}")
+                
+                optimizer.zero_grad()
+                logits = model(images, texture_features)
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Error in batch {batch_idx+1}: {str(e)}")
+                if error_count >= max_errors: 
+                    logger.error(f"Stopping epoch {epoch+1} due to too many errors")
+                    break
+                continue
             
-            optimizer.zero_grad()
-            water_logits, irr_logits = model(images, texture_features)
-            
-            loss = water_criterion(water_logits, water_labels) + irr_criterion(irr_logits, irr_labels)
+            loss = criterion(logits, labels)
             loss.backward()
             optimizer.step()
             
@@ -94,96 +130,133 @@ def train_classification_model(
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for images, texture_features, water_labels, irr_labels in val_loader:
-                images = images.to(device)
-                texture_features = texture_features.to(device)
-                water_labels = water_labels.to(device)
-                irr_labels = irr_labels.to(device)
-                
-                water_logits, irr_logits = model(images, texture_features)
-                loss = water_criterion(water_logits, water_labels) + irr_criterion(irr_logits, irr_labels)
+            error_count = 0
+            max_errors = 5  # Maximum number of errors before stopping validation
+            
+            for batch_idx, (images, labels, texture_features) in enumerate(val_loader):
+                try:
+                    images = images.to(device)
+                    labels = labels.to(device)
+                    texture_features = texture_features.to(device)
+                    
+                    # Validation in progress
+                    logits = model(images, texture_features)
+                except Exception as e:
+                    error_count += 1
+                    print(f"\nError in validation batch {batch_idx+1}:")
+                    print(f"  {str(e)}")
+                    if error_count >= max_errors:
+                        print(f"\nStopping validation due to too many errors")
+                        break
+                    continue
+                loss = criterion(logits, labels)
                 val_loss += loss.item()
         
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
         
-        # Save best model
+        # Save best model and check early stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(model.state_dict(), os.path.join(output_dir, 'best_model.pth'))
-        
-        print(f'Epoch {epoch+1}/{num_epochs}:')
-        print(f'Training Loss: {avg_train_loss:.4f}')
-        print(f'Validation Loss: {avg_val_loss:.4f}')
+            no_improve = 0
+        else:
+            no_improve += 1
+            
+        # Calculate batch training accuracy and metrics
+        with torch.no_grad():
+            _, train_preds = torch.max(logits.data, 1)
+            train_correct = (train_preds == labels).sum().item()
+            train_total = labels.shape[0]
+            train_acc = train_correct / train_total if train_total > 0 else 0.0
+            
+            # Calculate validation accuracy and metrics
+            val_correct = 0
+            val_total = 0
+            val_preds = []
+            val_trues = []
+            model.eval()
+            for val_images, val_labels, val_features in val_loader:
+                val_images = val_images.to(device)
+                val_labels = val_labels.to(device)
+                val_features = val_features.to(device)
+                val_outputs = model(val_images, val_features)
+                _, val_predicted = torch.max(val_outputs.data, 1)
+                val_total += val_labels.shape[0]
+                val_correct += (val_predicted == val_labels).sum().item()
+                val_preds.extend(val_predicted.cpu().numpy())
+                val_trues.extend(val_labels.cpu().numpy())
+            val_acc = val_correct / val_total if val_total > 0 else 0.0
+            
+            # Log epoch metrics
+            logger.info(f'Epoch {epoch+1}/{num_epochs}:')
+            logger.info(f'Training Loss: {avg_train_loss:.4f}, Accuracy: {train_acc:.4f}')
+            logger.info(f'Validation Loss: {avg_val_loss:.4f}, Accuracy: {val_acc:.4f}')
+            
+            # Early stopping check
+            if no_improve >= patience:
+                logger.info(f'Early stopping after {epoch+1} epochs without improvement')
+                break
+            model.train()
     
-    return train_losses, val_losses, water_criterion, irr_criterion
+    return train_losses, val_losses, criterion
 
 def evaluate_model(
     model: nn.Module,
     test_loader: DataLoader,
     device: torch.device,
     output_dir: str,
-    water_criterion: nn.Module,
-    irr_criterion: nn.Module
+    criterion: nn.Module
 ):
-    """Evaluate the model and save metrics and confusion matrices.
+    """Evaluate the model and save detailed metrics and visualizations.
     
     Args:
         model: Classification model
         test_loader: Test data loader
         device: Device to evaluate on
         output_dir: Directory to save metrics and plots
+        criterion: Loss criterion
     """
+    logger = logging.getLogger(__name__)
+    logger.info("Starting model evaluation...")
     model.eval()
-    water_preds = []
-    water_labels = []
-    irr_preds = []
-    irr_labels = []
+    all_preds = []
+    all_labels = []
+    test_loss = 0.0
     
     with torch.no_grad():
-        for images, texture_features, water_true, irr_true in test_loader:
+        for images, labels, texture_features in test_loader:  # Correct order: images, labels, texture_features
             images = images.to(device)
+            labels = labels.to(device)
             texture_features = texture_features.to(device)
             
-            water_logits, irr_logits = model(images, texture_features)
+            logits = model(images, texture_features)
+            loss = criterion(logits, labels)
+            test_loss += loss.item()
             
-            water_pred = torch.argmax(water_logits, dim=1).cpu().numpy()
-            irr_pred = torch.argmax(irr_logits, dim=1).cpu().numpy()
-            
-            water_preds.extend(water_pred)
-            water_labels.extend(water_true.numpy())
-            irr_preds.extend(irr_pred)
-            irr_labels.extend(irr_true.numpy())
+            preds = torch.argmax(logits, dim=1).cpu().numpy()
+            all_preds.extend(preds)
+            all_labels.extend(labels.cpu().numpy())
     
-    # Generate classification reports
-    water_report = classification_report(water_labels, water_preds, zero_division=0)
-    irr_report = classification_report(irr_labels, irr_preds, zero_division=0)
+    avg_test_loss = test_loss / len(test_loader)
+    logger.info(f"Test Loss: {avg_test_loss:.4f}")
+    
+    # Generate classification report
+    report = classification_report(all_labels, all_preds, zero_division=0)
     
     with open(os.path.join(output_dir, 'classification_report.txt'), 'w') as f:
-        f.write("Water Saving Classification Report:\n")
-        f.write(str(water_report))  # Convert to string explicitly
-        f.write("\n\nIrrigation Classification Report:\n")
-        f.write(str(irr_report))  # Convert to string explicitly
+        f.write("Classification Report:\n")
+        f.write(str(report))
     
-    # Generate confusion matrices
-    plt.figure(figsize=(12, 5))
-    
-    plt.subplot(1, 2, 1)
-    water_cm = confusion_matrix(water_labels, water_preds)
-    sns.heatmap(water_cm, annot=True, fmt='d', cmap='Blues')
-    plt.title('Water Saving Confusion Matrix')
+    # Generate confusion matrix
+    plt.figure(figsize=(10, 8))
+    cm = confusion_matrix(all_labels, all_preds)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title('Confusion Matrix')
     plt.xlabel('Predicted')
     plt.ylabel('True')
-    
-    plt.subplot(1, 2, 2)
-    irr_cm = confusion_matrix(irr_labels, irr_preds)
-    sns.heatmap(irr_cm, annot=True, fmt='d', cmap='Blues')
-    plt.title('Irrigation Confusion Matrix')
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'confusion_matrices.png'))
+    plt.savefig(os.path.join(output_dir, 'confusion_matrix.png'))
     plt.close()
 
 def main():
@@ -194,21 +267,32 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     
     # Initialize model and move to device
-    model = RGBClassificationModel().to(device)
+    model = SingleTaskClassificationModel(num_classes=5, num_texture_features=31).to(device)
     
     # Set up optimizer
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
     # Create data loaders with classification labels
-    train_loader, val_loader, test_loader = prepare_dataset(
-        excel_path='/home/ubuntu/attachments/11.xlsx',
-        img_dir='/home/ubuntu/attachments/img_xin11',
+    train_loader, val_loader = create_dataloaders(
+        task='water_saving_class',
         batch_size=32,
-        classification=True  # Enable classification mode
+        train_split=0.7,
+        val_split=0.2,
+        test_split=0.1
+    )
+    
+    # Create test loader separately
+    test_loader, _ = create_dataloaders(
+        task='water_saving_class',
+        batch_size=32,
+        train_split=0.7,
+        val_split=0.2,
+        test_split=0.1,
+        return_test=True
     )
     
     # Train model
-    train_losses, val_losses, water_criterion, irr_criterion = train_classification_model(
+    train_losses, val_losses, criterion = train_classification_model(
         train_loader=train_loader,
         val_loader=val_loader,
         model=model,
@@ -236,8 +320,7 @@ def main():
         test_loader=test_loader,
         device=device,
         output_dir=output_dir,
-        water_criterion=water_criterion,
-        irr_criterion=irr_criterion
+        criterion=criterion
     )
 
 if __name__ == '__main__':

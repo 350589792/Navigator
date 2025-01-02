@@ -3,7 +3,7 @@ import torch.nn as nn
 import torchvision.models as models
 
 class IrrigationModel(nn.Module):
-    def __init__(self, texture_dim=31, pretrained=True):
+    def __init__(self, texture_dim=33, pretrained=True):
         super(IrrigationModel, self).__init__()
         
         # Load pretrained ResNet18
@@ -13,9 +13,9 @@ class IrrigationModel(nn.Module):
         in_features = self.backbone.fc.in_features
         self.backbone.fc = nn.Identity()
         
-        # Add texture feature processing branch
+        # Add texture feature processing branch with updated dimensions
         self.texture_branch = nn.Sequential(
-            nn.Linear(texture_dim, 64),
+            nn.Linear(texture_dim, 64),  # Now using texture_dim=33
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(64, 32)
@@ -73,10 +73,11 @@ class IrrigationLoss(nn.Module):
         return irr_norm * (self.irr_max - self.irr_min) + self.irr_min
     
     def forward(self, irr_pred, irr_true):
-        # Normalize predictions (since model outputs raw values)
+        # Normalize both predictions and true values
         irr_pred_norm = self.normalize(irr_pred)
+        irr_true_norm = self.normalize(irr_true)
         
         # Calculate loss using normalized values
-        irr_loss = self.mse(irr_pred_norm, irr_true)
+        irr_loss = self.mse(irr_pred_norm, irr_true_norm)
         
         return irr_loss

@@ -1,0 +1,25 @@
+2025-01-02 13:38:09,077 - INFO: Preparing training...
+2025-01-02 13:38:15,497 - INFO: Starting training...
+2025-01-02 13:38:15,498 - INFO: Training on device: cpu
+2025-01-02 13:38:15,498 - INFO: Number of batches per epoch: 7
+2025-01-02 13:38:15,498 - INFO: Batch size: 32
+2025-01-02 13:38:15,498 - INFO: Total training samples: 217
+2025-01-02 13:38:16,404 - INFO: Starting training with input shapes:
+2025-01-02 13:38:16,405 - INFO: Images: torch.Size([32, 3, 198, 198])
+2025-01-02 13:38:16,406 - INFO: Labels: torch.Size([32])
+2025-01-02 13:38:16,406 - INFO: Texture features: torch.Size([32, 31])
+2025-01-02 13:38:31,882 - INFO: Epoch 1/50:
+2025-01-02 13:38:31,883 - INFO: Training Loss: 2.9575, Accuracy: 0.1667
+2025-01-02 13:38:31,883 - INFO: Validation Loss: 1.7076, Accuracy: 0.2097
+2025-01-02 13:38:47,257 - INFO: Epoch 2/50:
+2025-01-02 13:38:47,257 - INFO: Training Loss: 2.3862, Accuracy: 0.4333
+2025-01-02 13:38:47,257 - INFO: Validation Loss: 1.6068, Accuracy: 0.4516
+2025-01-02 13:39:02,366 - INFO: Epoch 3/50:
+2025-01-02 13:39:02,366 - INFO: Training Loss: 1.9310, Accuracy: 0.1333
+2025-01-02 13:39:02,366 - INFO: Validation Loss: 1.5819, Accuracy: 0.1290
+2025-01-02 13:39:17,542 - INFO: Epoch 4/50:
+2025-01-02 13:39:17,543 - INFO: Training Loss: 1.7002, Accuracy: 0.3000
+2025-01-02 13:39:17,543 - INFO: Validation Loss: 1.6361, Accuracy: 0.3548
+2025-01-02 13:39:32,871 - INFO: Epoch 5/50:
+2025-01-02 13:39:32,871 - INFO: Training Loss: 1.6595, Accuracy: 0.3000
+2025-01-02 13:39:32,871 - INFO: Validation Loss: 1.6229, Accuracy: 0.3387

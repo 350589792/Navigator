@@ -6,58 +6,28 @@ import cv2
 from pathlib import Path
 import matplotlib.pyplot as plt
 from models.irrigation_model import IrrigationModel, IrrigationLoss
-from preprocess_images_v2 import ImagePreprocessor, prepare_dataset
+from utils.create_dataloaders import create_dataloaders
 import pandas as pd
-
-class IrrigationDataset(Dataset):
-    def __init__(self, image_paths, irrigation_labels, preprocessor, augment=False):
-        self.image_paths = image_paths
-        self.irrigation_labels = irrigation_labels
-        self.preprocessor = preprocessor
-        self.augment = augment
-    
-    def __len__(self):
-        return len(self.image_paths)
-    
-    def __getitem__(self, idx):
-        # Load and preprocess image
-        image, texture_features = self.preprocessor.preprocess_image(self.image_paths[idx], augment=self.augment)
-        image = torch.FloatTensor(image.transpose(2, 0, 1))  # Convert to CHW format
-        texture_features = torch.FloatTensor(texture_features)
-        
-        # Get irrigation label only
-        irrigation_label = torch.FloatTensor([self.irrigation_labels[idx]])
-        
-        return image, texture_features, irrigation_label
 
 def train_model(excel_path, image_dir, num_epochs=100, batch_size=32, learning_rate=0.0001):
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    # Initialize preprocessor
-    preprocessor = ImagePreprocessor()
-    
-    # Prepare dataset
-    dataset = prepare_dataset(excel_path, image_dir, preprocessor)
-    
-    # Create data loaders for irrigation only
-    train_dataset = IrrigationDataset(
-        dataset['train'][0], dataset['train'][2],
-        preprocessor, augment=True
+    # Create data loaders for irrigation regression
+    train_loader, val_loader = create_dataloaders(
+        task='irrigation',
+        batch_size=batch_size,
+        train_split=0.7,
+        val_split=0.2
     )
-    val_dataset = IrrigationDataset(
-        dataset['val'][0], dataset['val'][2],
-        preprocessor, augment=False
+    # Create test loader separately
+    _, test_loader = create_dataloaders(
+        task='irrigation',
+        batch_size=batch_size,
+        train_split=0.0,
+        val_split=1.0
     )
-    test_dataset = IrrigationDataset(
-        dataset['test'][0], dataset['test'][2],
-        preprocessor, augment=False
-    )
-    
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size)
     
     # Use original data ranges for loss calculation
     irr_min, irr_max = 1459.0, 1800.0
@@ -88,7 +58,7 @@ def train_model(excel_path, image_dir, num_epochs=100, batch_size=32, learning_r
         train_losses = []
         
         # Print shapes for first batch in first epoch
-        for images, texture_features, irrigation_labels in train_loader:
+        for images, texture_features, _, irrigation_labels in train_loader:
             if epoch == 0:
                 print("\nVerifying feature dimensions:")
                 print(f"Images shape: {images.shape}")
@@ -96,7 +66,7 @@ def train_model(excel_path, image_dir, num_epochs=100, batch_size=32, learning_r
                 print(f"Irrigation labels shape: {irrigation_labels.shape}\n")
             break
         
-        for images, texture_features, irrigation_labels in train_loader:
+        for images, texture_features, _, irrigation_labels in train_loader:
             images = images.to(device)
             texture_features = texture_features.to(device)
             irrigation_labels = irrigation_labels.to(device)
@@ -115,7 +85,7 @@ def train_model(excel_path, image_dir, num_epochs=100, batch_size=32, learning_r
         val_losses = []
         
         with torch.no_grad():
-            for images, texture_features, irrigation_labels in val_loader:
+            for images, texture_features, _, irrigation_labels in val_loader:
                 images = images.to(device)
                 texture_features = texture_features.to(device)
                 irrigation_labels = irrigation_labels.to(device)
@@ -124,7 +94,6 @@ def train_model(excel_path, image_dir, num_epochs=100, batch_size=32, learning_r
                 loss = criterion(irrigation_pred, irrigation_labels.squeeze())
                 
                 val_losses.append(loss.item())
-        
         
         # Calculate average losses
         avg_train_loss = np.mean(train_losses)
@@ -172,13 +141,13 @@ def train_model(excel_path, image_dir, num_epochs=100, batch_size=32, learning_r
     test_true = []
     
     with torch.no_grad():
-        for images, texture_features, irrigation_labels in test_loader:
+        for images, texture_features, _, irrigation_labels in test_loader:
             images = images.to(device)
             texture_features = texture_features.to(device)
             irrigation_pred = model(images, texture_features)
             
             test_predictions.extend(irrigation_pred.cpu().numpy())
-            test_true.extend(irrigation_labels.numpy().squeeze())
+            test_true.extend(irrigation_labels.numpy())
     
     # Generate scatter plot
     plt.figure(figsize=(10, 6))
@@ -206,6 +175,6 @@ def train_model(excel_path, image_dir, num_epochs=100, batch_size=32, learning_r
     plt.close()
 
 if __name__ == '__main__':
-    excel_path = '11.xlsx'
-    image_dir = '所有数据/小区图像数据'
-    train_model(excel_path, image_dir)
+    excel_path = '/home/ubuntu/attachments/11.xlsx'
+    image_dir = '/home/ubuntu/attachments/img_xin'
+    train_model(excel_path, image_dir, num_epochs=50, batch_size=32, learning_rate=0.001)
