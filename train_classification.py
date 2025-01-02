@@ -53,10 +53,12 @@ def train_classification_model(
     train_loader: DataLoader,
     val_loader: DataLoader,
     model: nn.Module,
-    optimizer: optim.Optimizer,
     num_epochs: int,
     device: torch.device,
-    output_dir: str
+    output_dir: str,
+    learning_rate: float = 0.0002,  # Reduced learning rate
+    weight_decay: float = 0.01,     # L2 regularization
+    patience: int = 15              # Increased patience
 ) -> tuple[list[float], list[float], nn.Module]:
     """Train the classification model with proper metric tracking.
     
@@ -75,36 +77,51 @@ def train_classification_model(
     logger = logging.getLogger(__name__)
     logger.info("Preparing training...")
     
-    # Calculate class weights from training data
+    # Calculate inverse frequency class weights with better smoothing
     labels = []
     for _, label_batch, _ in train_loader:
         batch_labels = label_batch.numpy().flatten()
         labels.extend(batch_labels.astype(int).tolist())
     
-    from sklearn.utils.class_weight import compute_class_weight
+    # Count frequency of each class
+    class_counts = np.bincount(labels, minlength=5)
+    total_samples = len(labels)
+    n_classes = 5
     
-    # Force all 5 classes (0-4)
-    all_classes = np.arange(5)
+    # Calculate effective number of samples with stronger smoothing
+    beta = 0.9999  # Smoothing factor
+    effective_samples = class_counts + beta * (total_samples / n_classes)
     
-    # Ensure labels are in valid range and convert to integers
-    labels = np.clip(labels, 0, 4).astype(int)
+    # Calculate balanced weights with wider bounds for extreme imbalance
+    class_weights = total_samples / (n_classes * effective_samples)
+    class_weights = np.clip(class_weights, 0.05, 20.0)  # Allow more extreme weights for better balance
     
-    # Compute weights for all 5 classes silently
-    class_weights = compute_class_weight(
-        class_weight='balanced',
-        classes=all_classes,
-        y=labels
-    )
+    # Log class distribution and weights
+    logger.info("\nClass distribution and weights:")
+    for i, (count, weight) in enumerate(zip(class_counts, class_weights)):
+        logger.info(f"Class {i}: {count} samples ({count/total_samples*100:.1f}%), weight = {weight:.4f}")
     
     # Set up weighted loss function
     criterion = nn.CrossEntropyLoss(
         weight=torch.tensor(class_weights, dtype=torch.float32).to(device)
     )
-    # Calculate class weights and set up loss function
+    # Set up optimizer with weight decay
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    
+    # Set up learning rate scheduler
+    scheduler = optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=learning_rate,
+        epochs=num_epochs,
+        steps_per_epoch=len(train_loader),
+        pct_start=0.3,  # Longer warmup
+        div_factor=25,  # Initial lr = max_lr/25
+        final_div_factor=1000  # Min lr = initial_lr/1000
+    )
+    
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
-    patience = 5  # Early stopping patience
     no_improve = 0
     
     logger.info("Starting training...")
@@ -181,6 +198,9 @@ def train_classification_model(
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
         
+        # Update learning rate scheduler
+        scheduler.step(avg_val_loss)
+        
         # Save best model and check early stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
@@ -189,11 +209,19 @@ def train_classification_model(
         else:
             no_improve += 1
             
-        # Calculate batch training accuracy and metrics
+        # Calculate epoch-level training accuracy
         with torch.no_grad():
-            _, train_preds = torch.max(logits.data, 1)
-            train_correct = (train_preds == labels).sum().item()
-            train_total = labels.shape[0]
+            model.eval()
+            train_correct = 0
+            train_total = 0
+            for train_images, train_labels, train_features in train_loader:
+                train_images = train_images.to(device)
+                train_labels = train_labels.to(device)
+                train_features = train_features.to(device)
+                train_outputs = model(train_images, train_features)
+                _, train_predicted = torch.max(train_outputs.data, 1)
+                train_total += train_labels.size(0)
+                train_correct += (train_predicted == train_labels).sum().item()
             train_acc = train_correct / train_total if train_total > 0 else 0.0
             
             # Calculate validation accuracy and metrics
@@ -201,14 +229,13 @@ def train_classification_model(
             val_total = 0
             val_preds = []
             val_trues = []
-            model.eval()
             for val_images, val_labels, val_features in val_loader:
                 val_images = val_images.to(device)
                 val_labels = val_labels.to(device)
                 val_features = val_features.to(device)
                 val_outputs = model(val_images, val_features)
                 _, val_predicted = torch.max(val_outputs.data, 1)
-                val_total += val_labels.shape[0]
+                val_total += val_labels.size(0)
                 val_correct += (val_predicted == val_labels).sum().item()
                 val_preds.extend(val_predicted.cpu().numpy())
                 val_trues.extend(val_labels.cpu().numpy())
@@ -267,15 +294,33 @@ def evaluate_model(
     avg_test_loss = test_loss / len(test_loader)
     logger.info(f"Test Loss: {avg_test_loss:.4f}")
     
-    # Generate classification report
+    # Generate and log classification report
     report = classification_report(all_labels, all_preds, zero_division=0)
+    logger.info("\nClassification Report:")
+    logger.info(f"\n{report}")
     
+    # Generate and log confusion matrix
+    cm = confusion_matrix(all_labels, all_preds)
+    logger.info("\nConfusion Matrix:")
+    logger.info(f"\n{cm}")
+    
+    # Save metrics to files
     with open(os.path.join(output_dir, 'classification_report.txt'), 'w') as f:
         f.write("Classification Report:\n")
-        f.write(str(report))
-    
-    # Generate confusion matrix
+        f.write(str(report))  # Convert classification report to string
+        
+    with open(os.path.join(output_dir, 'confusion_matrix.txt'), 'w') as f:
+        f.write("Confusion Matrix:\n")
+        f.write(str(cm))
+        
+    # Plot confusion matrix heatmap
     plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title('Confusion Matrix')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.savefig(os.path.join(output_dir, 'confusion_matrix.png'))
+    plt.close()
     cm = confusion_matrix(all_labels, all_preds)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
     plt.title('Confusion Matrix')
@@ -299,10 +344,7 @@ def main():
     # Initialize model and move to device
     model = SingleTaskClassificationModel(num_classes=5, num_texture_features=31).to(device)
     
-    # Set up optimizer
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-    
-    # Create data loaders with classification labels
+    # Create data loaders with classification labels first
     train_loader, val_loader = create_dataloaders(
         task='water_saving_class',
         batch_size=32,
@@ -321,15 +363,17 @@ def main():
         return_test=True
     )
     
-    # Train model
+    # Train model with refined hyperparameters
     train_losses, val_losses, criterion = train_classification_model(
         train_loader=train_loader,
         val_loader=val_loader,
         model=model,
-        optimizer=optimizer,
-        num_epochs=50,
+        num_epochs=200,  # Increased epochs
         device=device,
-        output_dir=output_dir
+        output_dir=output_dir,
+        learning_rate=0.0002,  # Lower learning rate
+        weight_decay=0.01,    # L2 regularization
+        patience=15           # Increased patience
     )
     
     # Plot training curves

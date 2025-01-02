@@ -11,32 +11,42 @@ class SingleTaskClassificationModel(nn.Module):
     def __init__(self, num_classes: int = 5, num_texture_features: int = 31):
         super().__init__()
         
-        # Load pre-trained ResNet18
-        resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
-        self.features = nn.Sequential(*list(resnet.children())[:-1])
+        self.num_texture_features = num_texture_features
         
-        # Texture feature processing (match input dimension of 31)
+        # Load pre-trained ResNet34 for increased capacity
+        resnet = models.resnet34(weights=models.ResNet34_Weights.IMAGENET1K_V1)
+        # Enhanced feature extraction with regularization
+        modules = list(resnet.children())[:-2]  # Remove final pooling and fc
+        modules.append(nn.BatchNorm2d(512))  # Normalize features
+        modules.append(nn.Dropout2d(0.4))    # Spatial dropout
+        modules.append(nn.AdaptiveAvgPool2d((1, 1)))
+        self.features = nn.Sequential(*modules)
+        
+        # Simplified texture feature processing with batch normalization
         self.texture_processor = nn.Sequential(
             nn.Linear(num_texture_features, 64),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.4),
             nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Dropout(0.2)
+            nn.BatchNorm1d(32),
+            nn.ReLU()
         )
         
         # Combined feature dimension
         combined_features = 512 + 32  # ResNet18 features (512) + processed texture features (32)
         
-        # Classification head
+        # Enhanced classification head with stronger regularization
         self.classifier = nn.Sequential(
-            nn.Linear(combined_features, 256),
+            nn.Linear(combined_features, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(256, 128),
+            nn.Dropout(0.5),
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(128, num_classes)
+            nn.Dropout(0.4),
+            nn.Linear(256, num_classes)
         )
     
     def forward(self, images: torch.Tensor, texture_features: torch.Tensor) -> torch.Tensor:
@@ -61,7 +71,7 @@ class SingleTaskClassificationModel(nn.Module):
             texture_features = texture_features.unsqueeze(0)
         
         # Handle case where batch dimension is second
-        if texture_features.dim() == 2 and texture_features.shape[1] != self.texture_processor[0].in_features:
+        if texture_features.dim() == 2 and texture_features.shape[1] != self.num_texture_features:
             texture_features = texture_features.t()
         
         # Process features through texture network
@@ -88,6 +98,8 @@ class RGBClassificationModel(nn.Module):
     """
     def __init__(self, num_texture_features: int = 31):
         super().__init__()
+        
+        self.num_texture_features = num_texture_features
         
         # Load pre-trained ResNet18
         resnet = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
@@ -153,7 +165,7 @@ class RGBClassificationModel(nn.Module):
             texture_features = texture_features.unsqueeze(0)
         
         # Handle case where batch dimension is second
-        if texture_features.dim() == 2 and texture_features.shape[1] != self.texture_processor[0].in_features:
+        if texture_features.dim() == 2 and texture_features.shape[1] != self.num_texture_features:
             texture_features = texture_features.t()
         
         print(f"Reshaped texture_features shape: {texture_features.shape}")
