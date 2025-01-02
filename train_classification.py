@@ -1,3 +1,25 @@
+import os
+import logging
+from datetime import datetime
+
+# Set up logging configuration at the very start
+timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+output_dir = f'outputs/classification_{timestamp}'
+os.makedirs(output_dir, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s: %(message)s',
+    handlers=[
+        logging.FileHandler(os.path.join(output_dir, 'training.log')),
+        logging.StreamHandler()
+    ]
+)
+
+# Set specific logger levels
+logging.getLogger('preprocess_images_v2').setLevel(logging.INFO)
+
+# After logging setup, import other modules
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -6,9 +28,6 @@ import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
-from datetime import datetime
-import os
-import logging
 
 from models.classification_model import SingleTaskClassificationModel
 from utils.binning import ValueBinner
@@ -37,15 +56,6 @@ def train_classification_model(
     Returns:
         tuple[list[float], list[float], nn.Module]: Training losses, validation losses, criterion
     """
-    import logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s: %(message)s',
-        handlers=[
-            logging.FileHandler(os.path.join(output_dir, 'training.log')),
-            logging.StreamHandler()
-        ]
-    )
     logger = logging.getLogger(__name__)
     logger.info("Preparing training...")
     
@@ -260,11 +270,15 @@ def evaluate_model(
     plt.close()
 
 def main():
-    # Set up device and output directory
+    logger = logging.getLogger(__name__)
+    logger.info("Starting classification training...")
+    
+    # Explicitly set level for all loggers
+    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger('preprocess_images_v2').setLevel(logging.INFO)
+    
+    # Set up device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_dir = f'outputs/classification_{timestamp}'
-    os.makedirs(output_dir, exist_ok=True)
     
     # Initialize model and move to device
     model = SingleTaskClassificationModel(num_classes=5, num_texture_features=31).to(device)

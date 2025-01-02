@@ -199,13 +199,18 @@ class RGBDataset(Dataset):
         texture_features = extract_texture_features(image)
         texture_features = torch.tensor(texture_features, dtype=torch.float32)
         
-        # Log debug information only at trace level
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Processing item {idx}:")
-            logger.debug(f"Image path: {img_path}")
-            logger.debug(f"Label: {item['water_saving']}")
-            logger.debug(f"Texture features shape: {texture_features.shape}")
-            logger.debug(f"Number of texture features: {len(texture_features)}")
+        # Only log first batch of first epoch for verification
+        if not hasattr(self, '_first_batch_logged'):
+            self._first_batch_logged = False
+            
+        if not self._first_batch_logged and idx < 5:
+            logger.info(f"First batch sample {idx}:")
+            logger.info(f"Image path: {img_path}")
+            logger.info(f"Label: {item['water_saving']}")
+            logger.info(f"Texture features shape: {texture_features.shape}")
+            logger.info(f"Number of texture features: {len(texture_features)}")
+            if idx == 4:
+                self._first_batch_logged = True
         
         if len(texture_features) != 31:
             raise ValueError(f"Expected 31 texture features, got {len(texture_features)}")
